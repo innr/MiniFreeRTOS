@@ -5,7 +5,7 @@ implementation, tests, and lesson notes have been reviewed.
 
 - [x] P0: task context and cooperative switching
 - [x] P1: priority scheduler, round-robin selection, and idle task
-- [ ] P2: POSIX tick preemption and critical sections
+- [x] P2: POSIX tick preemption and critical sections
 - [ ] P3: delay and timeout lists
 - [ ] P4: queues and semaphores
 - [ ] P5: mutexes and priority inheritance

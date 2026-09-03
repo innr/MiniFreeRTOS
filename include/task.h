@@ -34,5 +34,6 @@ eTaskState eTaskGetState(TaskHandle_t task);
 UBaseType_t uxTaskGetNumberOfTasks(void);
 void vTaskPrioritySet(TaskHandle_t task, UBaseType_t priority);
 UBaseType_t uxTaskPriorityGet(TaskHandle_t task);
+TickType_t xTaskGetTickCount(void);
 
 #endif
