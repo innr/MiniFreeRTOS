@@ -10,6 +10,8 @@ static UBaseType_t application_task_count;
 static TCB_t *current_task;
 static TCB_t *idle_task;
 static BaseType_t scheduler_running;
+static BaseType_t task_context_active;
+static volatile TickType_t tick_count;
 
 static void prvReadyListInsert(TCB_t *task);
 static void prvReadyListRemove(TCB_t *task);
@@ -168,6 +170,10 @@ void vTaskStartScheduler(void)
         return;
     }
     scheduler_running = pdTRUE;
+    task_context_active = pdFALSE;
+#if configUSE_PREEMPTION
+    configASSERT(xPortStartTick() == pdPASS);
+#endif
     while (scheduler_running == pdTRUE) {
         TCB_t *next = prvSelectNextReadyTask();
         if (next == NULL) {
@@ -175,9 +181,14 @@ void vTaskStartScheduler(void)
         }
         current_task = next;
         current_task->state = eRunning;
+        task_context_active = pdTRUE;
         vPortRunTask(current_task);
+        task_context_active = pdFALSE;
         current_task = NULL;
     }
+#if configUSE_PREEMPTION
+    vPortStopTick();
+#endif
     scheduler_running = pdFALSE;
 }
 
@@ -228,6 +239,28 @@ eTaskState eTaskGetState(TaskHandle_t task)
 UBaseType_t uxTaskGetNumberOfTasks(void)
 {
     return task_count;
+}
+
+TickType_t xTaskGetTickCount(void)
+{
+    return tick_count;
+}
+
+void vTaskTickISR(void)
+{
+    ++tick_count;
+    if (scheduler_running != pdTRUE ||
+        task_context_active != pdTRUE ||
+        current_task == NULL) {
+        return;
+    }
+#if configUSE_PREEMPTION
+    if (current_task->state == eRunning) {
+        current_task->state = eReady;
+        prvReadyListInsert(current_task);
+        vPortYieldFromISR(current_task);
+    }
+#endif
 }
 
 void vTaskPrioritySet(TaskHandle_t task, UBaseType_t priority)

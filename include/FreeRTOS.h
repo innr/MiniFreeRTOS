@@ -18,4 +18,9 @@ typedef size_t StackType_t;
 #define configASSERT(condition) do { if (!(condition)) vAssertCalled(__FILE__, __LINE__); } while (0)
 void vAssertCalled(const char *file, int line);
 
+void vPortEnterCritical(void);
+void vPortExitCritical(void);
+#define taskENTER_CRITICAL() vPortEnterCritical()
+#define taskEXIT_CRITICAL()  vPortExitCritical()
+
 #endif

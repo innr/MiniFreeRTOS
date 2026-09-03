@@ -11,5 +11,8 @@ struct tskTaskControlBlock;
 void vPortInitialiseTask(struct tskTaskControlBlock *task);
 void vPortRunTask(struct tskTaskControlBlock *task);
 void vPortYieldTask(struct tskTaskControlBlock *task);
+void vPortYieldFromISR(struct tskTaskControlBlock *task);
+BaseType_t xPortStartTick(void);
+void vPortStopTick(void);
 
 #endif

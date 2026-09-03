@@ -29,5 +29,6 @@ struct tskTaskControlBlock {
 };
 
 void vTaskRunEntry(TCB_t *task);
+void vTaskTickISR(void);
 
 #endif
