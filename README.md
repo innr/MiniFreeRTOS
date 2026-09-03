@@ -4,7 +4,7 @@ MiniFreeRTOS is a from-scratch, FreeRTOS-like teaching kernel written in C. The
 first port runs on a POSIX PC, letting you learn and debug kernel concepts before
 moving to Cortex-M exception-based context switching.
 
-## Current milestone: P0
+## Current milestone: P1
 
 Implemented:
 
@@ -14,8 +14,11 @@ Implemented:
 - POSIX `ucontext` port layer
 - cooperative context switching with `taskYIELD()`
 - task return and deleted state
+- strict numeric-priority selection
+- equal-priority round robin at `taskYIELD()`
+- internal Idle Task and priority getter/setter
 
-Not implemented yet: priority scheduling, tick, delays, queues, semaphores,
+Not implemented yet: tick, delays, queues, semaphores,
 mutexes, heap variants, software timers, or interrupts.
 
 ## Run the first lesson
@@ -36,7 +39,7 @@ task=A private_counter=3
 task=B private_counter=3
 ```
 
-Start with `docs/DESIGN.md`, then read `kernel/tasks.c` beside
+Start with `docs/DESIGN.md` and `docs/P1_DESIGN.md`, then read `kernel/tasks.c` beside
 `portable/posix/port.c`. The boundary between those two files is the most
 important lesson in P0: the kernel decides *which* task runs, while the port
 implements *how* CPU context changes.
