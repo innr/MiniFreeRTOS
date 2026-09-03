@@ -14,6 +14,7 @@ typedef struct tskTaskControlBlock {
     UBaseType_t priority;
     eTaskState state;
     UBaseType_t creation_number;
+    BaseType_t is_idle;
 } TCB_t;
 
 void vTaskRunEntry(TCB_t *task);

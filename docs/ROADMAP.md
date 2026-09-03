@@ -4,7 +4,7 @@ Each phase is one review unit. Do not begin the next phase until its design delt
 implementation, tests, and lesson notes have been reviewed.
 
 - [x] P0: task context and cooperative switching
-- [ ] P1: priority scheduler and ready lists
+- [x] P1: priority scheduler, round-robin selection, and idle task
 - [ ] P2: POSIX tick preemption and critical sections
 - [ ] P3: delay and timeout lists
 - [ ] P4: queues and semaphores
@@ -13,4 +13,3 @@ implementation, tests, and lesson notes have been reviewed.
 - [ ] P7: software timer service task
 - [ ] P8: trace tools and full teaching labs
 - [ ] P9: Cortex-M port
-
