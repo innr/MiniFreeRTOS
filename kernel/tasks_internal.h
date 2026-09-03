@@ -4,7 +4,15 @@
 #include "task.h"
 #include "portmacro.h"
 
-typedef struct tskTaskControlBlock {
+typedef struct tskTaskControlBlock TCB_t;
+
+typedef struct {
+    TCB_t *head;
+    TCB_t *tail;
+    UBaseType_t length;
+} ReadyList_t;
+
+struct tskTaskControlBlock {
     PortContext_t port_context;
     TaskFunction_t task_code;
     void *parameters;
@@ -15,7 +23,10 @@ typedef struct tskTaskControlBlock {
     eTaskState state;
     UBaseType_t creation_number;
     BaseType_t is_idle;
-} TCB_t;
+    TCB_t *ready_previous;
+    TCB_t *ready_next;
+    BaseType_t in_ready_list;
+};
 
 void vTaskRunEntry(TCB_t *task);
 

@@ -8,15 +8,15 @@ P1 extends the cooperative P0 scheduler without adding wall-clock time,
 interrupts, delays, or IPC. A task gives up its cooperative time slice by calling
 `taskYIELD()`.
 
-## Selection algorithm
+## Ready-list and selection algorithm
 
-1. Start scanning at `next_task_index`.
-2. Among all `eReady` tasks, find the greatest numeric priority.
-3. Select the first task with that priority in the circular scan order.
-4. Advance `next_task_index` immediately after the selected task.
+1. Keep one intrusive FIFO ready list for each priority.
+2. Search priority levels from `configMAX_PRIORITIES - 1` down to zero.
+3. Remove the head of the first non-empty list for dispatch.
+4. Append a yielding task to the tail of its priority list.
 
 This gives strict priority selection and round-robin behavior for equal priority
-tasks. A lower-priority task cannot run while any higher-priority task is ready.
+tasks. A lower-priority task cannot run while any higher-priority list is non-empty.
 
 ## Idle task
 
@@ -59,4 +59,3 @@ section exits.
 
 No asynchronous preemption, tick counter, time slicing driven by a timer,
 blocking states, delayed lists, or ISR APIs. Those belong to P2/P3.
-

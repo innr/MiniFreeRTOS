@@ -4,11 +4,15 @@
 #include <string.h>
 
 static TCB_t *task_table[configMAX_TASKS + 1U];
+static ReadyList_t ready_lists[configMAX_PRIORITIES];
 static UBaseType_t task_count;
 static UBaseType_t application_task_count;
-static UBaseType_t next_task_index;
 static TCB_t *current_task;
+static TCB_t *idle_task;
 static BaseType_t scheduler_running;
+
+static void prvReadyListInsert(TCB_t *task);
+static void prvReadyListRemove(TCB_t *task);
 
 void vAssertCalled(const char *file, int line)
 {
@@ -50,6 +54,7 @@ BaseType_t xTaskCreate(TaskFunction_t task_code,
     vPortInitialiseTask(task);
     task_table[task_count++] = task;
     ++application_task_count;
+    prvReadyListInsert(task);
 
     if (created_task != NULL) {
         *created_task = task;
@@ -57,34 +62,54 @@ BaseType_t xTaskCreate(TaskFunction_t task_code,
     return pdPASS;
 }
 
+static void prvReadyListInsert(TCB_t *task)
+{
+    ReadyList_t *list = &ready_lists[task->priority];
+    configASSERT(task->in_ready_list == pdFALSE);
+    task->ready_previous = list->tail;
+    task->ready_next = NULL;
+    if (list->tail != NULL) {
+        list->tail->ready_next = task;
+    } else {
+        list->head = task;
+    }
+    list->tail = task;
+    ++list->length;
+    task->in_ready_list = pdTRUE;
+}
+
+static void prvReadyListRemove(TCB_t *task)
+{
+    ReadyList_t *list = &ready_lists[task->priority];
+    configASSERT(task->in_ready_list == pdTRUE);
+    if (task->ready_previous != NULL) {
+        task->ready_previous->ready_next = task->ready_next;
+    } else {
+        list->head = task->ready_next;
+    }
+    if (task->ready_next != NULL) {
+        task->ready_next->ready_previous = task->ready_previous;
+    } else {
+        list->tail = task->ready_previous;
+    }
+    task->ready_previous = NULL;
+    task->ready_next = NULL;
+    task->in_ready_list = pdFALSE;
+    configASSERT(list->length > 0U);
+    --list->length;
+}
+
 static TCB_t *prvSelectNextReadyTask(void)
 {
-    TCB_t *selected = NULL;
-    UBaseType_t selected_priority = 0U;
-    BaseType_t found = pdFALSE;
-
-    for (UBaseType_t checked = 0U; checked < task_count; ++checked) {
-        UBaseType_t index = (next_task_index + checked) % task_count;
-        TCB_t *candidate = task_table[index];
-        if (candidate->state != eReady) {
-            continue;
-        }
-        if ((found == pdFALSE) || (candidate->priority > selected_priority)) {
-            selected = candidate;
-            selected_priority = candidate->priority;
-            found = pdTRUE;
+    for (int priority = (int)configMAX_PRIORITIES - 1; priority >= 0; --priority) {
+        ReadyList_t *list = &ready_lists[priority];
+        if (list->head != NULL) {
+            TCB_t *selected = list->head;
+            prvReadyListRemove(selected);
+            return selected;
         }
     }
-
-    if (selected != NULL) {
-        for (UBaseType_t index = 0U; index < task_count; ++index) {
-            if (task_table[index] == selected) {
-                next_task_index = (index + 1U) % task_count;
-                break;
-            }
-        }
-    }
-    return selected;
+    return NULL;
 }
 
 static BaseType_t prvAllApplicationTasksDeleted(void)
@@ -112,6 +137,9 @@ static void prvIdleTask(void *parameters)
 
 static BaseType_t prvCreateIdleTask(void)
 {
+    if (idle_task != NULL) {
+        return pdPASS;
+    }
     TCB_t *task = calloc(1U, sizeof(*task));
     if (task == NULL) {
         return pdFAIL;
@@ -129,6 +157,8 @@ static BaseType_t prvCreateIdleTask(void)
     (void)snprintf(task->name, sizeof(task->name), "%s", "IDLE");
     vPortInitialiseTask(task);
     task_table[task_count++] = task;
+    prvReadyListInsert(task);
+    idle_task = task;
     return pdPASS;
 }
 
@@ -156,6 +186,7 @@ void vTaskEndScheduler(void)
     scheduler_running = pdFALSE;
     if (current_task != NULL) {
         current_task->state = eReady;
+        prvReadyListInsert(current_task);
         vPortYieldTask(current_task);
     }
 }
@@ -165,6 +196,7 @@ void vTaskYield(void)
     configASSERT(scheduler_running == pdTRUE);
     configASSERT(current_task != NULL);
     current_task->state = eReady;
+    prvReadyListInsert(current_task);
     vPortYieldTask(current_task);
 }
 
@@ -203,6 +235,12 @@ void vTaskPrioritySet(TaskHandle_t task, UBaseType_t priority)
     TCB_t *selected = (task != NULL) ? task : current_task;
     configASSERT(selected != NULL);
     configASSERT(priority < configMAX_PRIORITIES);
+    if (selected->state == eReady) {
+        prvReadyListRemove(selected);
+        selected->priority = priority;
+        prvReadyListInsert(selected);
+        return;
+    }
     selected->priority = priority;
 }
 
