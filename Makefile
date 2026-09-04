@@ -34,6 +34,9 @@ $(BUILD_DIR)/test_p4_queue: $(KERNEL_SOURCES) tests/test_p4_queue.c | $(BUILD_DI
 $(BUILD_DIR)/test_p4_semaphore: $(KERNEL_SOURCES) tests/test_p4_semaphore.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
 
+$(BUILD_DIR)/test_p5_mutex: $(KERNEL_SOURCES) tests/test_p5_mutex.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
+
 $(BUILD_DIR)/example_01: $(KERNEL_SOURCES) examples/01_task_create/main.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(NONPREEMPTIVE_FLAGS) $^ -o $@
 
@@ -46,9 +49,13 @@ $(BUILD_DIR)/example_03: $(KERNEL_SOURCES) examples/03_delay/main.c | $(BUILD_DI
 $(BUILD_DIR)/example_04: $(KERNEL_SOURCES) examples/04_ipc/main.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
 
+$(BUILD_DIR)/example_05: $(KERNEL_SOURCES) examples/05_mutex/main.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
+
 test: $(BUILD_DIR)/test_p0 $(BUILD_DIR)/test_p1 $(BUILD_DIR)/test_p2 \
 	$(BUILD_DIR)/test_p3_delay $(BUILD_DIR)/test_p3_wrap \
-	$(BUILD_DIR)/test_p4_queue $(BUILD_DIR)/test_p4_semaphore
+	$(BUILD_DIR)/test_p4_queue $(BUILD_DIR)/test_p4_semaphore \
+	$(BUILD_DIR)/test_p5_mutex
 	./$(BUILD_DIR)/test_p0
 	./$(BUILD_DIR)/test_p1
 	./$(BUILD_DIR)/test_p2
@@ -56,13 +63,15 @@ test: $(BUILD_DIR)/test_p0 $(BUILD_DIR)/test_p1 $(BUILD_DIR)/test_p2 \
 	./$(BUILD_DIR)/test_p3_wrap
 	./$(BUILD_DIR)/test_p4_queue
 	./$(BUILD_DIR)/test_p4_semaphore
+	./$(BUILD_DIR)/test_p5_mutex
 
 example: $(BUILD_DIR)/example_01 $(BUILD_DIR)/example_02 $(BUILD_DIR)/example_03 \
-	$(BUILD_DIR)/example_04
+	$(BUILD_DIR)/example_04 $(BUILD_DIR)/example_05
 	./$(BUILD_DIR)/example_01
 	./$(BUILD_DIR)/example_02
 	./$(BUILD_DIR)/example_03
 	./$(BUILD_DIR)/example_04
+	./$(BUILD_DIR)/example_05
 
 clean:
 	rm -rf $(BUILD_DIR)

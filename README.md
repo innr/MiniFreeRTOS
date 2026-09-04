@@ -4,7 +4,7 @@ MiniFreeRTOS is a from-scratch, FreeRTOS-like teaching kernel written in C. The
 first port runs on a POSIX PC, letting you learn and debug kernel concepts before
 moving to Cortex-M exception-based context switching.
 
-## Current milestone: P4
+## Current milestone: P5
 
 Implemented:
 
@@ -27,9 +27,10 @@ Implemented:
 - fixed-length, copy-by-value queues with blocking send/receive
 - priority-ordered event wait lists with finite tick timeouts
 - binary and counting semaphores
+- non-recursive mutexes with owner-only release
+- priority inheritance and disinheritance across mutex waiters
 
-Not implemented yet: mutexes and priority inheritance, heap variants, software
-timers, or interrupts.
+Not implemented yet: heap variants, software timers, or interrupts.
 
 ## Run the first lesson
 
@@ -59,8 +60,12 @@ samples and the scheduler wakes it from the tick-driven delay list.
 `make example` runs `examples/04_ipc`, where producer/consumer tasks exchange
 samples through a queue and signal completion with a binary semaphore.
 
+`make example` runs `examples/05_mutex`, where a high-priority waiter boosts a
+low-priority mutex owner above a medium-priority CPU-bound task.
+
 Start with `docs/DESIGN.md`, `docs/P1_DESIGN.md`, `docs/P2_DESIGN.md`,
-`docs/P3_DESIGN.md`, and `docs/P4_DESIGN.md`, then read `kernel/tasks.c` beside
+`docs/P3_DESIGN.md`, `docs/P4_DESIGN.md`, and `docs/P5_DESIGN.md`, then read
+`kernel/tasks.c` beside
 `portable/posix/port.c`. The boundary between those two files is the most
 important lesson in P0: the kernel decides *which* task runs, while the port
 implements *how* CPU context changes.

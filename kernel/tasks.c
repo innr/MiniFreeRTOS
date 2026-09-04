@@ -73,6 +73,8 @@ BaseType_t xTaskCreate(TaskFunction_t task_code,
     task->parameters = parameters;
     task->stack_size = stack_depth;
     task->priority = priority;
+    task->base_priority = priority;
+    task->inherited_priority = tskIDLE_PRIORITY;
     task->state = eReady;
     task->creation_number = application_task_count;
     (void)snprintf(task->name, sizeof(task->name), "%s", name);
@@ -242,6 +244,48 @@ void vTaskEventListInit(TaskEventList_t *list)
     list->length = 0U;
 }
 
+void vTaskSetEffectivePriority(TCB_t *task, UBaseType_t priority)
+{
+    TaskEventList_t *event_list;
+
+    configASSERT(task != NULL);
+    configASSERT(priority < configMAX_PRIORITIES);
+    if (task->priority == priority) {
+        return;
+    }
+
+    if (task->state == eReady) {
+        prvReadyListRemove(task);
+        task->priority = priority;
+        prvReadyListInsert(task);
+        return;
+    }
+
+    if ((task->state == eBlocked) && (task->event_list != NULL)) {
+        event_list = task->event_list;
+        prvEventListRemove(task);
+        task->priority = priority;
+        prvEventListInsert(event_list, task);
+        return;
+    }
+
+    task->priority = priority;
+}
+
+void vTaskSetInheritedPriority(TCB_t *task, UBaseType_t priority)
+{
+    UBaseType_t effective_priority;
+
+    configASSERT(task != NULL);
+    configASSERT(priority < configMAX_PRIORITIES);
+    task->inherited_priority = priority;
+    effective_priority = task->base_priority;
+    if (task->inherited_priority > effective_priority) {
+        effective_priority = task->inherited_priority;
+    }
+    vTaskSetEffectivePriority(task, effective_priority);
+}
+
 void vTaskBlockCurrent(TaskEventList_t *list,
                        void *wait_object,
                        TaskWaitReason_t wait_reason,
@@ -325,6 +369,7 @@ static void prvWakeExpiredTasks(void)
         prvDelayListRemove(task);
         if (task->event_list != NULL) {
             prvEventListRemove(task);
+            vTaskWaitEnded(task);
         }
         task->wait_result = pdFALSE;
         task->state = eReady;
@@ -389,6 +434,8 @@ static BaseType_t prvCreateIdleTask(void)
     task->task_code = prvIdleTask;
     task->stack_size = configMINIMAL_STACK_SIZE;
     task->priority = tskIDLE_PRIORITY;
+    task->base_priority = tskIDLE_PRIORITY;
+    task->inherited_priority = tskIDLE_PRIORITY;
     task->state = eReady;
     task->is_idle = pdTRUE;
     (void)snprintf(task->name, sizeof(task->name), "%s", "IDLE");
@@ -503,6 +550,7 @@ BaseType_t xTaskAbortDelay(TaskHandle_t task)
     prvDelayListRemove(task);
     if (task->event_list != NULL) {
         prvEventListRemove(task);
+        vTaskWaitEnded(task);
     }
     task->wait_result = pdFALSE;
     task->state = eReady;
@@ -526,6 +574,7 @@ void vTaskRunEntry(TCB_t *task)
 {
     configASSERT(task == current_task);
     task->task_code(task->parameters);
+    configASSERT(xTaskOwnsMutex(task) == pdFALSE);
     task->state = eDeleted;
     vPortYieldTask(task);
     configASSERT(pdFALSE);
@@ -584,15 +633,18 @@ void vTaskTickISR(void)
 void vTaskPrioritySet(TaskHandle_t task, UBaseType_t priority)
 {
     TCB_t *selected = (task != NULL) ? task : current_task;
+    UBaseType_t effective_priority;
+
     configASSERT(selected != NULL);
     configASSERT(priority < configMAX_PRIORITIES);
-    if (selected->state == eReady) {
-        prvReadyListRemove(selected);
-        selected->priority = priority;
-        prvReadyListInsert(selected);
-        return;
+    taskENTER_CRITICAL();
+    selected->base_priority = priority;
+    effective_priority = selected->base_priority;
+    if (selected->inherited_priority > effective_priority) {
+        effective_priority = selected->inherited_priority;
     }
-    selected->priority = priority;
+    vTaskSetEffectivePriority(selected, effective_priority);
+    taskEXIT_CRITICAL();
 }
 
 UBaseType_t uxTaskPriorityGet(TaskHandle_t task)
