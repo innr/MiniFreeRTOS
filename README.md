@@ -4,7 +4,7 @@ MiniFreeRTOS is a from-scratch, FreeRTOS-like teaching kernel written in C. The
 first port runs on a POSIX PC, letting you learn and debug kernel concepts before
 moving to Cortex-M exception-based context switching.
 
-## Current milestone: P6
+## Current milestone: P7
 
 Implemented:
 
@@ -31,8 +31,10 @@ Implemented:
 - priority inheritance and disinheritance across mutex waiters
 - selectable `heap_1`, `heap_2`, and `heap_4` allocators
 - aligned `pvPortMalloc()`/`vPortFree()` with free-byte statistics
+- software timer service task with one-shot and auto-reload timers
+- asynchronous timer start, stop, reset, and period-change commands
 
-Not implemented yet: software timers or interrupts.
+Not implemented yet: interrupt-safe APIs or a hardware port.
 
 ## Run the first lesson
 
@@ -69,9 +71,12 @@ low-priority mutex owner above a medium-priority CPU-bound task.
 heap statistics are visible. Select another allocator with
 `make HEAP_SCHEME=1 example` or `make HEAP_SCHEME=2 example`.
 
+`make example` runs `examples/07_timers`, where a timer service task invokes an
+auto-reload callback and the callback stops itself after three firings.
+
 Start with `docs/DESIGN.md`, `docs/P1_DESIGN.md`, `docs/P2_DESIGN.md`,
 `docs/P3_DESIGN.md`, `docs/P4_DESIGN.md`, `docs/P5_DESIGN.md`, and
-`docs/P6_DESIGN.md`, then read
+`docs/P6_DESIGN.md`, and `docs/P7_DESIGN.md`, then read
 `kernel/tasks.c` beside
 `portable/posix/port.c`. The boundary between those two files is the most
 important lesson in P0: the kernel decides *which* task runs, while the port
