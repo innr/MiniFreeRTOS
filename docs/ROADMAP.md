@@ -9,7 +9,7 @@ implementation, tests, and lesson notes have been reviewed.
 - [x] P3: delay and timeout lists
 - [x] P4: queues and semaphores
 - [x] P5: mutexes and priority inheritance
-- [ ] P6: heap_1, heap_2, heap_4
+- [x] P6: heap_1, heap_2, heap_4
 - [ ] P7: software timer service task
 - [ ] P8: trace tools and full teaching labs
 - [ ] P9: Cortex-M port
