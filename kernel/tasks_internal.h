@@ -10,6 +10,19 @@ typedef struct {
     TCB_t *head;
     TCB_t *tail;
     UBaseType_t length;
+} TaskEventList_t;
+
+typedef enum {
+    eTaskWaitNone,
+    eTaskWaitQueueSend,
+    eTaskWaitQueueReceive,
+    eTaskWaitSemaphoreTake
+} TaskWaitReason_t;
+
+typedef struct {
+    TCB_t *head;
+    TCB_t *tail;
+    UBaseType_t length;
 } ReadyList_t;
 
 struct tskTaskControlBlock {
@@ -30,10 +43,25 @@ struct tskTaskControlBlock {
     TCB_t *delay_previous;
     TCB_t *delay_next;
     BaseType_t in_delay_list;
+    TCB_t *event_previous;
+    TCB_t *event_next;
+    TaskEventList_t *event_list;
+    void *wait_object;
+    TaskWaitReason_t wait_reason;
+    BaseType_t wait_result;
+    BaseType_t wait_has_timeout;
 };
 
 void vTaskRunEntry(TCB_t *task);
 void vTaskTickISR(void);
 void vTaskSetTickCountForTest(TickType_t tick);
+void vTaskEventListInit(TaskEventList_t *list);
+void vTaskBlockCurrent(TaskEventList_t *list,
+                       void *wait_object,
+                       TaskWaitReason_t wait_reason,
+                       TickType_t ticks_to_wait);
+BaseType_t xTaskUnblockOne(TaskEventList_t *list);
+TickType_t xTaskGetWaitRemaining(TCB_t *task);
+void vTaskClearWaitState(TCB_t *task);
 
 #endif
