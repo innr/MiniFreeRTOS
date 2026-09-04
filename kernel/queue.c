@@ -1,7 +1,7 @@
 #include "tasks_internal.h"
 #include "queue.h"
 #include "semphr.h"
-#include <stdlib.h>
+#include "portable.h"
 #include <string.h>
 
 typedef enum {
@@ -93,10 +93,11 @@ static Queue_t *prvAllocateSemaphore(QueueKind_t kind,
                                      UBaseType_t max_count,
                                      UBaseType_t initial_count)
 {
-    Queue_t *semaphore = calloc(1U, sizeof(*semaphore));
+    Queue_t *semaphore = pvPortMalloc(sizeof(*semaphore));
     if (semaphore == NULL) {
         return NULL;
     }
+    (void)memset(semaphore, 0, sizeof(*semaphore));
     semaphore->kind = kind;
     semaphore->count = initial_count;
     semaphore->max_count = max_count;
@@ -114,14 +115,15 @@ QueueHandle_t xQueueCreate(UBaseType_t queue_length,
         ((size_t)item_size > (SIZE_MAX / (size_t)queue_length))) {
         return NULL;
     }
-    queue = calloc(1U, sizeof(*queue));
+    queue = pvPortMalloc(sizeof(*queue));
     if (queue == NULL) {
         return NULL;
     }
+    (void)memset(queue, 0, sizeof(*queue));
     queue->storage_size = (size_t)queue_length * (size_t)item_size;
-    queue->storage = malloc(queue->storage_size);
+    queue->storage = pvPortMalloc(queue->storage_size);
     if (queue->storage == NULL) {
-        free(queue);
+        vPortFree(queue);
         return NULL;
     }
     queue->kind = eQueueData;

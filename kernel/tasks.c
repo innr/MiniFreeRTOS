@@ -1,4 +1,5 @@
 #include "tasks_internal.h"
+#include "portable.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,13 +60,14 @@ BaseType_t xTaskCreate(TaskFunction_t task_code,
         return pdFAIL;
     }
 
-    TCB_t *task = calloc(1U, sizeof(*task));
+    TCB_t *task = pvPortMalloc(sizeof(*task));
     if (task == NULL) {
         return pdFAIL;
     }
-    task->stack = malloc(stack_depth);
+    (void)memset(task, 0, sizeof(*task));
+    task->stack = pvPortMalloc(stack_depth);
     if (task->stack == NULL) {
-        free(task);
+        vPortFree(task);
         return pdFAIL;
     }
 
@@ -422,13 +424,14 @@ static BaseType_t prvCreateIdleTask(void)
     if (idle_task != NULL) {
         return pdPASS;
     }
-    TCB_t *task = calloc(1U, sizeof(*task));
+    TCB_t *task = pvPortMalloc(sizeof(*task));
     if (task == NULL) {
         return pdFAIL;
     }
-    task->stack = malloc(configMINIMAL_STACK_SIZE);
+    (void)memset(task, 0, sizeof(*task));
+    task->stack = pvPortMalloc(configMINIMAL_STACK_SIZE);
     if (task->stack == NULL) {
-        free(task);
+        vPortFree(task);
         return pdFAIL;
     }
     task->task_code = prvIdleTask;
