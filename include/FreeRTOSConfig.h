@@ -8,6 +8,18 @@
 #define configTICK_RATE_HZ       1000U
 #define configUSE_TIME_SLICING   1U
 
+#ifndef configTOTAL_HEAP_SIZE
+#define configTOTAL_HEAP_SIZE     (1024U * 1024U)
+#endif
+
+#ifndef configHEAP_SCHEME
+#define configHEAP_SCHEME          4U
+#endif
+
+#ifndef portBYTE_ALIGNMENT
+#define portBYTE_ALIGNMENT         8U
+#endif
+
 #ifndef configUSE_PREEMPTION
 #define configUSE_PREEMPTION     1U
 #endif
