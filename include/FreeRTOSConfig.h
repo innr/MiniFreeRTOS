@@ -28,6 +28,18 @@
 #define configTIMER_TASK_STACK_DEPTH configMINIMAL_STACK_SIZE
 #endif
 
+#ifndef configTRACE_ENABLED
+#define configTRACE_ENABLED         1U
+#endif
+
+#ifndef configTRACE_BUFFER_LENGTH
+#define configTRACE_BUFFER_LENGTH   256U
+#endif
+
+#ifndef configTRACE_INCLUDE_TICKS
+#define configTRACE_INCLUDE_TICKS   0U
+#endif
+
 #ifndef configTOTAL_HEAP_SIZE
 #define configTOTAL_HEAP_SIZE     (1024U * 1024U)
 #endif
