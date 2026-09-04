@@ -7,7 +7,7 @@ implementation, tests, and lesson notes have been reviewed.
 - [x] P1: priority scheduler, round-robin selection, and idle task
 - [x] P2: POSIX tick preemption and critical sections
 - [x] P3: delay and timeout lists
-- [ ] P4: queues and semaphores
+- [x] P4: queues and semaphores
 - [ ] P5: mutexes and priority inheritance
 - [ ] P6: heap_1, heap_2, heap_4
 - [ ] P7: software timer service task

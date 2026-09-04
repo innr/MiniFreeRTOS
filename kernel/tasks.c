@@ -26,6 +26,8 @@ static void prvReadyListRemove(TCB_t *task);
 static void prvDelayListInsert(TCB_t *task);
 static void prvDelayListRemove(TCB_t *task);
 static void prvWakeExpiredTasks(void);
+static void prvEventListInsert(TaskEventList_t *list, TCB_t *task);
+static void prvEventListRemove(TCB_t *task);
 
 static BaseType_t prvTickBefore(TickType_t lhs, TickType_t rhs)
 {
@@ -176,6 +178,144 @@ static void prvDelayListRemove(TCB_t *task)
     --delayed_list.length;
 }
 
+static void prvEventListInsert(TaskEventList_t *list, TCB_t *task)
+{
+    TCB_t *cursor;
+
+    configASSERT(list != NULL);
+    configASSERT(task->event_list == NULL);
+    cursor = list->head;
+    while ((cursor != NULL) && (cursor->priority >= task->priority)) {
+        cursor = cursor->event_next;
+    }
+
+    if (cursor == NULL) {
+        task->event_previous = list->tail;
+        task->event_next = NULL;
+        if (list->tail != NULL) {
+            list->tail->event_next = task;
+        } else {
+            list->head = task;
+        }
+        list->tail = task;
+    } else {
+        task->event_previous = cursor->event_previous;
+        task->event_next = cursor;
+        if (cursor->event_previous != NULL) {
+            cursor->event_previous->event_next = task;
+        } else {
+            list->head = task;
+        }
+        cursor->event_previous = task;
+    }
+    ++list->length;
+    task->event_list = list;
+}
+
+static void prvEventListRemove(TCB_t *task)
+{
+    TaskEventList_t *list = task->event_list;
+
+    configASSERT(list != NULL);
+    if (task->event_previous != NULL) {
+        task->event_previous->event_next = task->event_next;
+    } else {
+        list->head = task->event_next;
+    }
+    if (task->event_next != NULL) {
+        task->event_next->event_previous = task->event_previous;
+    } else {
+        list->tail = task->event_previous;
+    }
+    task->event_previous = NULL;
+    task->event_next = NULL;
+    task->event_list = NULL;
+    configASSERT(list->length > 0U);
+    --list->length;
+}
+
+void vTaskEventListInit(TaskEventList_t *list)
+{
+    configASSERT(list != NULL);
+    list->head = NULL;
+    list->tail = NULL;
+    list->length = 0U;
+}
+
+void vTaskBlockCurrent(TaskEventList_t *list,
+                       void *wait_object,
+                       TaskWaitReason_t wait_reason,
+                       TickType_t ticks_to_wait)
+{
+    TCB_t *task = current_task;
+
+    configASSERT(scheduler_running == pdTRUE);
+    configASSERT(task != NULL);
+    configASSERT(task->state == eRunning);
+    configASSERT(list != NULL);
+    configASSERT(task->event_list == NULL);
+    configASSERT(task->in_delay_list == pdFALSE);
+    configASSERT(ticks_to_wait > 0U);
+    configASSERT(ticks_to_wait < (TickType_t)INT32_MAX);
+
+    task->state = eBlocked;
+    task->wait_object = wait_object;
+    task->wait_reason = wait_reason;
+    task->wait_result = pdFALSE;
+    task->wait_has_timeout = pdTRUE;
+    task->wake_tick = tick_count + ticks_to_wait;
+    prvEventListInsert(list, task);
+    prvDelayListInsert(task);
+}
+
+BaseType_t xTaskUnblockOne(TaskEventList_t *list)
+{
+    TCB_t *task;
+
+    configASSERT(list != NULL);
+    task = list->head;
+    if (task == NULL) {
+        return pdFALSE;
+    }
+    configASSERT(task->state == eBlocked);
+    prvEventListRemove(task);
+    if (task->in_delay_list == pdTRUE) {
+        prvDelayListRemove(task);
+    }
+    task->wait_result = pdTRUE;
+    task->state = eReady;
+    prvReadyListInsert(task);
+#if configUSE_PREEMPTION
+    if ((current_task != NULL) && (current_task->state == eRunning) &&
+        (task->priority > current_task->priority)) {
+        return pdTRUE;
+    }
+#endif
+    return pdFALSE;
+}
+
+TickType_t xTaskGetWaitRemaining(TCB_t *task)
+{
+    configASSERT(task != NULL);
+    if ((task->wait_has_timeout == pdFALSE) ||
+        (prvTickBefore(tick_count, task->wake_tick) == pdFALSE)) {
+        return 0U;
+    }
+    return task->wake_tick - tick_count;
+}
+
+void vTaskClearWaitState(TCB_t *task)
+{
+    configASSERT(task != NULL);
+    configASSERT(task->event_list == NULL);
+    configASSERT(task->in_delay_list == pdFALSE);
+    task->wake_tick = 0U;
+    task->wait_object = NULL;
+    task->wait_reason = eTaskWaitNone;
+    task->wait_result = pdFALSE;
+    task->wait_has_timeout = pdFALSE;
+}
+
 static void prvWakeExpiredTasks(void)
 {
     while ((delayed_list.head != NULL) &&
@@ -183,7 +323,10 @@ static void prvWakeExpiredTasks(void)
         TCB_t *task = delayed_list.head;
         configASSERT(task->state == eBlocked);
         prvDelayListRemove(task);
-        task->wake_tick = 0U;
+        if (task->event_list != NULL) {
+            prvEventListRemove(task);
+        }
+        task->wait_result = pdFALSE;
         task->state = eReady;
         prvReadyListInsert(task);
     }
@@ -318,10 +461,15 @@ void vTaskDelay(TickType_t ticks_to_delay)
     task = current_task;
     taskENTER_CRITICAL();
     task->wake_tick = tick_count + ticks_to_delay;
+    task->wait_object = NULL;
+    task->wait_reason = eTaskWaitNone;
+    task->wait_result = pdFALSE;
+    task->wait_has_timeout = pdFALSE;
     task->state = eBlocked;
     prvDelayListInsert(task);
     taskEXIT_CRITICAL();
     vPortYieldTask(task);
+    vTaskClearWaitState(task);
 }
 
 void vTaskDelayUntil(TickType_t *previous_wake_time,
@@ -353,7 +501,10 @@ BaseType_t xTaskAbortDelay(TaskHandle_t task)
         return pdFAIL;
     }
     prvDelayListRemove(task);
-    task->wake_tick = 0U;
+    if (task->event_list != NULL) {
+        prvEventListRemove(task);
+    }
+    task->wait_result = pdFALSE;
     task->state = eReady;
     prvReadyListInsert(task);
 #if configUSE_PREEMPTION
