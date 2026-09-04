@@ -2,6 +2,7 @@
 #include <signal.h>
 #include <stdint.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 static struct sigaction old_tick_action;
 static sigset_t tick_signal_set;
@@ -47,6 +48,11 @@ void vPortYieldTask(struct tskTaskControlBlock *task)
 void vPortYieldFromISR(struct tskTaskControlBlock *task)
 {
     configASSERT(swapcontext(&task->port_context.native, &scheduler_context) == 0);
+}
+
+void vPortWaitForTick(void)
+{
+    (void)pause();
 }
 
 void vPortEnterCritical(void)

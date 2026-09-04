@@ -22,20 +22,33 @@ $(BUILD_DIR)/test_p1: $(KERNEL_SOURCES) tests/test_p1_scheduler.c | $(BUILD_DIR)
 $(BUILD_DIR)/test_p2: $(KERNEL_SOURCES) tests/test_p2_preemption.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
 
+$(BUILD_DIR)/test_p3_delay: $(KERNEL_SOURCES) tests/test_p3_delay.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
+
+$(BUILD_DIR)/test_p3_wrap: $(KERNEL_SOURCES) tests/test_p3_wrap.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
+
 $(BUILD_DIR)/example_01: $(KERNEL_SOURCES) examples/01_task_create/main.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(NONPREEMPTIVE_FLAGS) $^ -o $@
 
 $(BUILD_DIR)/example_02: $(KERNEL_SOURCES) examples/02_preemption/main.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
 
-test: $(BUILD_DIR)/test_p0 $(BUILD_DIR)/test_p1 $(BUILD_DIR)/test_p2
+$(BUILD_DIR)/example_03: $(KERNEL_SOURCES) examples/03_delay/main.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
+
+test: $(BUILD_DIR)/test_p0 $(BUILD_DIR)/test_p1 $(BUILD_DIR)/test_p2 \
+	$(BUILD_DIR)/test_p3_delay $(BUILD_DIR)/test_p3_wrap
 	./$(BUILD_DIR)/test_p0
 	./$(BUILD_DIR)/test_p1
 	./$(BUILD_DIR)/test_p2
+	./$(BUILD_DIR)/test_p3_delay
+	./$(BUILD_DIR)/test_p3_wrap
 
-example: $(BUILD_DIR)/example_01 $(BUILD_DIR)/example_02
+example: $(BUILD_DIR)/example_01 $(BUILD_DIR)/example_02 $(BUILD_DIR)/example_03
 	./$(BUILD_DIR)/example_01
 	./$(BUILD_DIR)/example_02
+	./$(BUILD_DIR)/example_03
 
 clean:
 	rm -rf $(BUILD_DIR)
