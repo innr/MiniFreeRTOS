@@ -1,6 +1,7 @@
 #include "tasks_internal.h"
 #include "portable.h"
 #include "queue.h"
+#include "trace_internal.h"
 #include "timers.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -167,7 +168,12 @@ static BaseType_t prvSendTimerCommand(TimerHandle_t timer,
     command.kind = kind;
     command.timer = timer;
     command.period = period;
-    return xQueueSend(timer_command_queue, &command, ticks_to_wait);
+    if (xQueueSend(timer_command_queue, &command, ticks_to_wait) != pdPASS) {
+        return pdFAIL;
+    }
+    TRACE_RECORD(eTraceTimerCommandQueued, current_task, NULL, timer,
+                 (UBaseType_t)kind);
+    return pdPASS;
 }
 
 BaseType_t xTimerStart(TimerHandle_t timer, TickType_t ticks_to_wait)
@@ -328,6 +334,8 @@ static void prvApplyTimerCommand(const TimerCommand_t *command)
         configASSERT(pdFALSE);
         break;
     }
+    TRACE_RECORD(eTraceTimerCommandApplied, xTaskGetCurrentTaskHandle(),
+                 NULL, timer, (UBaseType_t)command->kind);
 }
 
 static void prvExpireDueTimers(void)
@@ -350,6 +358,8 @@ static void prvExpireDueTimers(void)
         prvActiveTimerRemove(timer);
         taskEXIT_CRITICAL();
 
+        TRACE_RECORD(eTraceTimerCallback, xTaskGetCurrentTaskHandle(), NULL,
+                     timer, (UBaseType_t)auto_reload);
         callback(timer);
 
         taskENTER_CRITICAL();
