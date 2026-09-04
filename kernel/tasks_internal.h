@@ -62,6 +62,10 @@ BaseType_t xTaskCreateSystem(TaskFunction_t task_code,
                              void *parameters,
                              UBaseType_t priority,
                              TaskHandle_t *created_task);
+TCB_t *pxTaskGetCurrent(void);
+BaseType_t xTaskIsSchedulerRunning(void);
+void vTaskSetContextActive(BaseType_t active);
+void vTaskSwitchContext(void);
 void vTaskRunEntry(TCB_t *task);
 void vTaskTickISR(void);
 void vTaskSetTickCountForTest(TickType_t tick);

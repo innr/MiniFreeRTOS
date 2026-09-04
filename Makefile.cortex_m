@@ -1,0 +1,82 @@
+SHELL := /bin/sh
+
+CROSS_COMPILE ?= arm-none-eabi-
+CC            := $(CROSS_COMPILE)gcc
+OBJCOPY       := $(CROSS_COMPILE)objcopy
+SIZE          := $(CROSS_COMPILE)size
+OBJDUMP       := $(CROSS_COMPILE)objdump
+QEMU          ?= qemu-system-arm
+
+BUILD_DIR := build/cortex_m_an385
+ELF       := $(BUILD_DIR)/minifreertos_p9.elf
+BIN       := $(BUILD_DIR)/minifreertos_p9.bin
+MAP       := $(BUILD_DIR)/minifreertos_p9.map
+LINKER    := portable/cortex_m/qemu_mps2_an385/linker.ld
+
+HEAP_SCHEME ?= 4
+ifeq ($(filter 1 2 4,$(HEAP_SCHEME)),)
+$(error HEAP_SCHEME must be 1, 2, or 4)
+endif
+
+CPU_FLAGS := -mcpu=cortex-m3 -mthumb
+WARN_FLAGS := -Wall -Wextra -Wpedantic -Werror
+CFLAGS := -std=c11 -Os -ffreestanding -fno-builtin \
+	-ffunction-sections -fdata-sections $(CPU_FLAGS) $(WARN_FLAGS)
+CPPFLAGS := -DconfigHEAP_SCHEME=$(HEAP_SCHEME) \
+	-DconfigUSE_PREEMPTION=1 -Iinclude -Ikernel \
+	-Iportable/cortex_m -Iportable/cortex_m/qemu_mps2_an385
+LDFLAGS := $(CPU_FLAGS) -T$(LINKER) -nostdlib \
+	-Wl,--gc-sections,-Map=$(MAP)
+LDLIBS := -lgcc
+
+KERNEL_SOURCES := kernel/tasks.c kernel/queue.c kernel/timers.c \
+	kernel/trace.c kernel/heap_$(HEAP_SCHEME).c
+PORT_SOURCES := portable/cortex_m/port.c portable/cortex_m/port_frame.c \
+	portable/cortex_m/freestanding.c \
+	portable/cortex_m/qemu_mps2_an385/board.c \
+	portable/cortex_m/qemu_mps2_an385/startup.S portable/cortex_m/portasm.S
+APPLICATION_SOURCES := examples/09_cortex_m/main.c
+SOURCES := $(KERNEL_SOURCES) $(PORT_SOURCES) $(APPLICATION_SOURCES)
+
+.PHONY: all check-tools check-sources size inspect qemu clean
+
+all: check-tools check-sources $(ELF) $(BIN)
+
+check-tools:
+	@missing=0; \
+	for tool in "$(CC)" "$(OBJCOPY)" "$(SIZE)" "$(OBJDUMP)"; do \
+		command -v "$$tool" >/dev/null 2>&1 || { echo "missing ARM tool: $$tool"; missing=1; }; \
+	done; \
+	if [ "$$missing" -ne 0 ]; then \
+		echo "Install an arm-none-eabi toolchain and retry make -f Makefile.cortex_m"; \
+		exit 2; \
+	fi
+
+check-sources:
+	@if grep -REn '#include[[:space:]]+<(signal|sys/time|unistd|ucontext|pthread)' \
+		kernel portable/cortex_m include examples/09_cortex_m; then \
+		echo "Cortex-M sources must not include hosted POSIX headers"; \
+		exit 2; \
+	fi
+
+$(BUILD_DIR):
+	mkdir -p $@
+
+$(ELF): check-tools check-sources $(SOURCES) $(LINKER) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) $(SOURCES) $(LDLIBS) -o $@
+
+$(BIN): $(ELF)
+	$(OBJCOPY) -O binary $< $@
+
+size: check-tools $(ELF)
+	$(SIZE) $(ELF)
+
+inspect: check-tools check-sources $(ELF)
+	$(OBJDUMP) -h -t $(ELF)
+
+qemu: check-tools check-sources $(ELF)
+	$(QEMU) -M mps2-an385 -cpu cortex-m3 -kernel $(ELF) \
+		-nographic -semihosting-config enable=on,target=native
+
+clean:
+	rm -rf $(BUILD_DIR)

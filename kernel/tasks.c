@@ -1,8 +1,6 @@
 #include "tasks_internal.h"
 #include "portable.h"
 #include "trace_internal.h"
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 _Static_assert(configMAX_SYSTEM_TASKS >= 2U,
@@ -33,6 +31,7 @@ static void prvDelayListRemove(TCB_t *task);
 static void prvWakeExpiredTasks(void);
 static void prvEventListInsert(TaskEventList_t *list, TCB_t *task);
 static void prvEventListRemove(TCB_t *task);
+static TCB_t *prvSelectNextReadyTask(void);
 static BaseType_t prvCreateTask(TaskFunction_t task_code,
                                 const char *name,
                                 uint32_t stack_depth,
@@ -41,6 +40,21 @@ static BaseType_t prvCreateTask(TaskFunction_t task_code,
                                 BaseType_t is_system,
                                 BaseType_t is_idle,
                                 TaskHandle_t *created_task);
+
+static void prvCopyName(char *destination, size_t destination_size,
+                        const char *source)
+{
+    size_t index = 0U;
+
+    if (destination_size == 0U) {
+        return;
+    }
+    while ((index + 1U < destination_size) && (source[index] != '\0')) {
+        destination[index] = source[index];
+        ++index;
+    }
+    destination[index] = '\0';
+}
 
 static BaseType_t prvTickBefore(TickType_t lhs, TickType_t rhs)
 {
@@ -54,8 +68,7 @@ static BaseType_t prvTickReached(TickType_t now, TickType_t deadline)
 
 void vAssertCalled(const char *file, int line)
 {
-    (void)fprintf(stderr, "MiniFreeRTOS assertion failed at %s:%d\n", file, line);
-    abort();
+    vPortAssertCalled(file, line);
 }
 
 BaseType_t xTaskCreate(TaskFunction_t task_code,
@@ -121,7 +134,7 @@ static BaseType_t prvCreateTask(TaskFunction_t task_code,
     task->creation_number = application_task_count;
     task->is_idle = is_idle;
     task->is_system = is_system;
-    (void)snprintf(task->name, sizeof(task->name), "%s", name);
+    prvCopyName(task->name, sizeof(task->name), name);
     vPortInitialiseTask(task);
     task_table[task_count++] = task;
     if (is_system == pdFALSE) {
@@ -443,6 +456,37 @@ static TCB_t *prvSelectNextReadyTask(void)
     return NULL;
 }
 
+TCB_t *pxTaskGetCurrent(void)
+{
+    return current_task;
+}
+
+BaseType_t xTaskIsSchedulerRunning(void)
+{
+    return scheduler_running;
+}
+
+void vTaskSetContextActive(BaseType_t active)
+{
+    task_context_active = active;
+}
+
+void vTaskSwitchContext(void)
+{
+    TCB_t *previous_task = current_task;
+    TCB_t *next_task = prvSelectNextReadyTask();
+
+    if (next_task == NULL) {
+        current_task = NULL;
+        task_context_active = pdFALSE;
+        return;
+    }
+    current_task = next_task;
+    current_task->state = eRunning;
+    TRACE_RECORD(eTraceTaskSwitch, current_task, previous_task, NULL,
+                 current_task->priority);
+}
+
 static BaseType_t prvAllApplicationTasksDeleted(void)
 {
     for (UBaseType_t index = 0U; index < task_count; ++index) {
@@ -489,8 +533,6 @@ static BaseType_t prvCreateIdleTask(void)
 
 void vTaskStartScheduler(void)
 {
-    TCB_t *previous_task = NULL;
-
     if ((scheduler_running == pdTRUE) || (prvCreateIdleTask() != pdPASS)) {
         return;
     }
@@ -499,25 +541,12 @@ void vTaskStartScheduler(void)
 #if configUSE_PREEMPTION
     configASSERT(xPortStartTick() == pdPASS);
 #endif
-    while (scheduler_running == pdTRUE) {
-        TCB_t *next = prvSelectNextReadyTask();
-        if (next == NULL) {
-            break;
-        }
-        current_task = next;
-        current_task->state = eRunning;
-        TRACE_RECORD(eTraceTaskSwitch, current_task, previous_task, NULL,
-                     current_task->priority);
-        previous_task = current_task;
-        task_context_active = pdTRUE;
-        vPortRunTask(current_task);
-        task_context_active = pdFALSE;
-        current_task = NULL;
-    }
+    vPortStartScheduler();
 #if configUSE_PREEMPTION
     vPortStopTick();
 #endif
     scheduler_running = pdFALSE;
+    task_context_active = pdFALSE;
 }
 
 void vTaskEndScheduler(void)
@@ -526,8 +555,8 @@ void vTaskEndScheduler(void)
     if (current_task != NULL) {
         current_task->state = eReady;
         prvReadyListInsert(current_task);
-        vPortYieldTask(current_task);
     }
+    vPortEndScheduler();
 }
 
 void vTaskYield(void)

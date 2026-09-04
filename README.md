@@ -4,7 +4,7 @@ MiniFreeRTOS is a from-scratch, FreeRTOS-like teaching kernel written in C. The
 first port runs on a POSIX PC, letting you learn and debug kernel concepts before
 moving to Cortex-M exception-based context switching.
 
-## Current milestone: P8
+## Current milestone: P9
 
 Implemented:
 
@@ -35,8 +35,10 @@ Implemented:
 - asynchronous timer start, stop, reset, and period-change commands
 - allocation-free static trace ring with task, IPC, mutex, and timer events
 - CSV trace lesson and standard-library host report
+- Cortex-M3 port boundary, initial exception stack frames, and QEMU AN385 lesson
 
-Not implemented yet: interrupt-safe APIs or a hardware port.
+Not implemented yet: interrupt-safe application APIs, FPU context support, or
+vendor-specific physical-board ports.
 
 ## Run the first lesson
 
@@ -81,10 +83,21 @@ a chronological CSV event stream. Summarize it with
 `python3 tools/trace_report.py /tmp/minifreertos-trace.csv`. Use
 `make TRACE_TICKS=1 trace` when a lesson needs one event per tick.
 
+The P9 Cortex-M lesson requires an `arm-none-eabi` toolchain and QEMU:
+
+```sh
+make -f Makefile.cortex_m all
+make -f Makefile.cortex_m qemu
+```
+
+The target is intentionally separate from the host Makefile. If the ARM tools
+are unavailable it reports the missing prerequisites instead of running a host
+binary as a substitute.
+
 Start with `docs/DESIGN.md`, `docs/P1_DESIGN.md`, `docs/P2_DESIGN.md`,
 `docs/P3_DESIGN.md`, `docs/P4_DESIGN.md`, `docs/P5_DESIGN.md`, and
 `docs/P6_DESIGN.md`, `docs/P7_DESIGN.md`, and `docs/P8_DESIGN.md`, then read
-`docs/P8_TRACE_LAB.md` and `docs/LABS.md` before reading
+`docs/P8_TRACE_LAB.md`, `docs/P9_DESIGN.md`, and `docs/LABS.md` before reading
 `kernel/tasks.c` beside
 `portable/posix/port.c`. The boundary between those two files is the most
 important lesson in P0: the kernel decides *which* task runs, while the port

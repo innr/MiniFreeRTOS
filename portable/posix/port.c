@@ -1,6 +1,8 @@
 #include "tasks_internal.h"
 #include <signal.h>
+#include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -8,13 +10,16 @@ static struct sigaction old_tick_action;
 static sigset_t tick_signal_set;
 static unsigned critical_nesting;
 static BaseType_t tick_started;
+static volatile sig_atomic_t tick_handler_active;
 
 static ucontext_t scheduler_context;
 
 static void prvTickSignalHandler(int signal_number)
 {
     (void)signal_number;
+    tick_handler_active = 1;
     vTaskTickISR();
+    tick_handler_active = 0;
 }
 
 static void prvPortTaskTrampoline(uintptr_t raw_task)
@@ -47,7 +52,11 @@ void vPortYieldTask(struct tskTaskControlBlock *task)
 
 void vPortYieldFromISR(struct tskTaskControlBlock *task)
 {
+    /* The signal handler's context is suspended while the scheduler runs.
+     * Mark it inactive so other task contexts use the normal trace path. */
+    tick_handler_active = 0;
     configASSERT(swapcontext(&task->port_context.native, &scheduler_context) == 0);
+    tick_handler_active = 1;
 }
 
 void vPortWaitForTick(void)
@@ -110,4 +119,46 @@ void vPortStopTick(void)
         (void)sigaction(SIGALRM, &old_tick_action, NULL);
         tick_started = pdFALSE;
     }
+}
+
+void vPortStartScheduler(void)
+{
+    while (xTaskIsSchedulerRunning() == pdTRUE) {
+        TCB_t *task;
+
+        /* The scheduler context is not a task context.  Keep it out of the
+         * tick preemption path while selecting the next ready task. */
+        vTaskSetContextActive(pdFALSE);
+        taskENTER_CRITICAL();
+        vTaskSwitchContext();
+        taskEXIT_CRITICAL();
+        task = (TCB_t *)xTaskGetCurrentTaskHandle();
+        if (task == NULL) {
+            break;
+        }
+        vTaskSetContextActive(pdTRUE);
+        vPortRunTask(task);
+    }
+    vTaskSetContextActive(pdFALSE);
+}
+
+void vPortEndScheduler(void)
+{
+    TCB_t *task = (TCB_t *)xTaskGetCurrentTaskHandle();
+
+    if (task != NULL) {
+        vPortYieldTask(task);
+    }
+}
+
+BaseType_t xPortIsInsideISR(void)
+{
+    return (tick_handler_active != 0) ? pdTRUE : pdFALSE;
+}
+
+void vPortAssertCalled(const char *file, int line)
+{
+    (void)fprintf(stderr, "MiniFreeRTOS assertion failed at %s:%d\n",
+                  file, line);
+    abort();
 }

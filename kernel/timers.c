@@ -4,7 +4,6 @@
 #include "trace_internal.h"
 #include "timers.h"
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 #if configMAX_TIMER_NAME_LEN == 0U
@@ -51,6 +50,21 @@ static TimerHandle_t timer_registry;
 static TimerHandle_t active_timers;
 
 static void vTimerServiceTask(void *parameters);
+
+static void prvCopyName(char *destination, size_t destination_size,
+                        const char *source)
+{
+    size_t index = 0U;
+
+    if (destination_size == 0U) {
+        return;
+    }
+    while ((index + 1U < destination_size) && (source[index] != '\0')) {
+        destination[index] = source[index];
+        ++index;
+    }
+    destination[index] = '\0';
+}
 
 static BaseType_t prvTimerIsRegistered(TimerHandle_t timer)
 {
@@ -124,7 +138,7 @@ TimerHandle_t xTimerCreate(const char *name,
         return NULL;
     }
     (void)memset(timer, 0, sizeof(*timer));
-    (void)snprintf(timer->name, sizeof(timer->name), "%s", name);
+    prvCopyName(timer->name, sizeof(timer->name), name);
     timer->period = period;
     timer->auto_reload = auto_reload;
     timer->timer_id = timer_id;

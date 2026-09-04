@@ -15,6 +15,29 @@ rerun the lesson.
 | P6 | examples/06_heap | Allocation, alignment, freeing, and heap statistics |
 | P7 | examples/07_timers | Timer service task and asynchronous commands |
 | P8 | examples/08_trace | Explain the whole run from a kernel event timeline |
+| P9 | examples/09_cortex_m | SVC launch, SysTick, PendSV, and a freestanding board lesson |
+
+## P9: Cortex-M exception path
+
+The P9 lesson is built separately because it targets ARM rather than the host:
+
+~~~sh
+make -f Makefile.cortex_m all
+make -f Makefile.cortex_m inspect
+make -f Makefile.cortex_m qemu
+~~~
+
+Questions:
+
+1. Which values are restored by SVC before the first task executes?
+2. Why does SysTick request PendSV instead of saving registers itself?
+3. Where is the old PSP saved, and how does `vTaskSwitchContext()` remain
+   independent of the register frame?
+
+Expected observation: the consumer starts through SVC, a delayed producer is
+woken by SysTick, and PendSV preserves each task's independent stack while the
+queue transfer completes. The QEMU board adapter uses semihosting only for the
+lesson console and exit status; it is not part of the kernel API.
 
 For the detailed questions and expected observations, read
 docs/P8_TRACE_LAB.md. The P8 trace report is optional for earlier lessons,
