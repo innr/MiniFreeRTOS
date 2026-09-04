@@ -1,6 +1,7 @@
 #include "tasks_internal.h"
 #include "queue.h"
 #include "semphr.h"
+#include "trace_internal.h"
 #include "portable.h"
 #include <string.h>
 
@@ -34,18 +35,28 @@ static Queue_t *mutex_registry;
 static void prvRecomputeInheritedPriority(TCB_t *task)
 {
     UBaseType_t inherited_priority = tskIDLE_PRIORITY;
+    UBaseType_t previous_priority;
+    Queue_t *source_mutex = NULL;
+    TCB_t *source_waiter = NULL;
 
     if (task == NULL) {
         return;
     }
+    previous_priority = task->priority;
     for (Queue_t *mutex = mutex_registry; mutex != NULL;
          mutex = mutex->registry_next) {
         if ((mutex->owner == task) && (mutex->receive_waiters.head != NULL) &&
             (mutex->receive_waiters.head->priority > inherited_priority)) {
             inherited_priority = mutex->receive_waiters.head->priority;
+            source_mutex = mutex;
+            source_waiter = mutex->receive_waiters.head;
         }
     }
     vTaskSetInheritedPriority(task, inherited_priority);
+    if (task->priority > previous_priority) {
+        TRACE_RECORD(eTraceMutexInherit, task, source_waiter, source_mutex,
+                     task->priority);
+    }
 }
 
 BaseType_t xTaskOwnsMutex(TCB_t *task)
@@ -154,11 +165,15 @@ BaseType_t xQueueSend(QueueHandle_t queue_handle,
         if (queue->count < queue->length) {
             uint8_t *slot = queue->storage +
                             ((size_t)queue->head * (size_t)queue->item_size);
+            UBaseType_t messages_waiting;
             (void)memcpy(slot, item, queue->item_size);
             queue->head = (queue->head + 1U) % queue->length;
             ++queue->count;
+            messages_waiting = queue->count;
             should_yield = xTaskUnblockOne(&queue->receive_waiters);
             taskEXIT_CRITICAL();
+            TRACE_RECORD(eTraceQueueSend, xTaskGetCurrentTaskHandle(), NULL,
+                         queue, messages_waiting);
             if (should_yield == pdTRUE) {
                 vTaskYield();
             }
@@ -201,11 +216,15 @@ BaseType_t xQueueReceive(QueueHandle_t queue_handle,
         if (queue->count > 0U) {
             uint8_t *slot = queue->storage +
                             ((size_t)queue->tail * (size_t)queue->item_size);
+            UBaseType_t messages_waiting;
             (void)memcpy(buffer, slot, queue->item_size);
             queue->tail = (queue->tail + 1U) % queue->length;
             --queue->count;
+            messages_waiting = queue->count;
             should_yield = xTaskUnblockOne(&queue->send_waiters);
             taskEXIT_CRITICAL();
+            TRACE_RECORD(eTraceQueueReceive, xTaskGetCurrentTaskHandle(), NULL,
+                         queue, messages_waiting);
             if (should_yield == pdTRUE) {
                 vTaskYield();
             }
@@ -300,7 +319,11 @@ BaseType_t xSemaphoreTake(SemaphoreHandle_t semaphore_handle,
                 semaphore->owner = current;
             }
             --semaphore->count;
+            UBaseType_t count_after = semaphore->count;
             taskEXIT_CRITICAL();
+            TRACE_RECORD(eTraceSemaphoreTake,
+                         (current != NULL) ? current : xTaskGetCurrentTaskHandle(),
+                         NULL, semaphore, count_after);
             return pdPASS;
         }
         if (ticks_to_wait == 0U) {
@@ -371,6 +394,8 @@ BaseType_t xSemaphoreGive(SemaphoreHandle_t semaphore_handle)
         }
 #endif
         taskEXIT_CRITICAL();
+        TRACE_RECORD(eTraceMutexRelease, current, waiter, semaphore,
+                     current->priority);
         if (should_yield == pdTRUE) {
             vTaskYield();
         }
@@ -381,8 +406,11 @@ BaseType_t xSemaphoreGive(SemaphoreHandle_t semaphore_handle)
         return pdFAIL;
     }
     ++semaphore->count;
+    UBaseType_t count_after = semaphore->count;
     should_yield = xTaskUnblockOne(&semaphore->receive_waiters);
     taskEXIT_CRITICAL();
+    TRACE_RECORD(eTraceSemaphoreGive, xTaskGetCurrentTaskHandle(), NULL,
+                 semaphore, count_after);
     if (should_yield == pdTRUE) {
         vTaskYield();
     }
