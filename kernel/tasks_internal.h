@@ -16,7 +16,8 @@ typedef enum {
     eTaskWaitNone,
     eTaskWaitQueueSend,
     eTaskWaitQueueReceive,
-    eTaskWaitSemaphoreTake
+    eTaskWaitSemaphoreTake,
+    eTaskWaitMutexTake
 } TaskWaitReason_t;
 
 typedef struct {
@@ -33,6 +34,8 @@ struct tskTaskControlBlock {
     size_t stack_size;
     char name[configMAX_TASK_NAME_LEN];
     UBaseType_t priority;
+    UBaseType_t base_priority;
+    UBaseType_t inherited_priority;
     eTaskState state;
     UBaseType_t creation_number;
     BaseType_t is_idle;
@@ -56,6 +59,8 @@ void vTaskRunEntry(TCB_t *task);
 void vTaskTickISR(void);
 void vTaskSetTickCountForTest(TickType_t tick);
 void vTaskEventListInit(TaskEventList_t *list);
+void vTaskSetEffectivePriority(TCB_t *task, UBaseType_t priority);
+void vTaskSetInheritedPriority(TCB_t *task, UBaseType_t priority);
 void vTaskBlockCurrent(TaskEventList_t *list,
                        void *wait_object,
                        TaskWaitReason_t wait_reason,
@@ -63,5 +68,7 @@ void vTaskBlockCurrent(TaskEventList_t *list,
 BaseType_t xTaskUnblockOne(TaskEventList_t *list);
 TickType_t xTaskGetWaitRemaining(TCB_t *task);
 void vTaskClearWaitState(TCB_t *task);
+void vTaskWaitEnded(TCB_t *task);
+BaseType_t xTaskOwnsMutex(TCB_t *task);
 
 #endif

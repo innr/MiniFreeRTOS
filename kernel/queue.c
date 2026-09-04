@@ -7,7 +7,8 @@
 typedef enum {
     eQueueData,
     eBinarySemaphore,
-    eCountingSemaphore
+    eCountingSemaphore,
+    eMutex
 } QueueKind_t;
 
 typedef struct mini_queue Queue_t;
@@ -24,7 +25,56 @@ struct mini_queue {
     UBaseType_t max_count;
     TaskEventList_t send_waiters;
     TaskEventList_t receive_waiters;
+    TCB_t *owner;
+    Queue_t *registry_next;
 };
+
+static Queue_t *mutex_registry;
+
+static void prvRecomputeInheritedPriority(TCB_t *task)
+{
+    UBaseType_t inherited_priority = tskIDLE_PRIORITY;
+
+    if (task == NULL) {
+        return;
+    }
+    for (Queue_t *mutex = mutex_registry; mutex != NULL;
+         mutex = mutex->registry_next) {
+        if ((mutex->owner == task) && (mutex->receive_waiters.head != NULL) &&
+            (mutex->receive_waiters.head->priority > inherited_priority)) {
+            inherited_priority = mutex->receive_waiters.head->priority;
+        }
+    }
+    vTaskSetInheritedPriority(task, inherited_priority);
+}
+
+BaseType_t xTaskOwnsMutex(TCB_t *task)
+{
+    if (task == NULL) {
+        return pdFALSE;
+    }
+    for (Queue_t *mutex = mutex_registry; mutex != NULL;
+         mutex = mutex->registry_next) {
+        if (mutex->owner == task) {
+            return pdTRUE;
+        }
+    }
+    return pdFALSE;
+}
+
+void vTaskWaitEnded(TCB_t *task)
+{
+    Queue_t *mutex;
+
+    if ((task == NULL) || (task->wait_reason != eTaskWaitMutexTake)) {
+        return;
+    }
+    mutex = task->wait_object;
+    if ((mutex != NULL) && (mutex->kind == eMutex) &&
+        (mutex->owner != NULL)) {
+        prvRecomputeInheritedPriority(mutex->owner);
+    }
+}
 
 static void prvAssertTimeoutIsValid(TickType_t ticks_to_wait)
 {
@@ -202,21 +252,51 @@ SemaphoreHandle_t xSemaphoreCreateCounting(UBaseType_t max_count,
     return prvAllocateSemaphore(eCountingSemaphore, max_count, initial_count);
 }
 
+SemaphoreHandle_t xSemaphoreCreateMutex(void)
+{
+    Queue_t *mutex = prvAllocateSemaphore(eMutex, 1U, 1U);
+
+    if (mutex == NULL) {
+        return NULL;
+    }
+    mutex->registry_next = mutex_registry;
+    mutex_registry = mutex;
+    return mutex;
+}
+
 BaseType_t xSemaphoreTake(SemaphoreHandle_t semaphore_handle,
                           TickType_t ticks_to_wait)
 {
     Queue_t *semaphore = semaphore_handle;
     TCB_t *current = NULL;
+    TCB_t *owner;
 
     configASSERT(semaphore != NULL);
     if ((semaphore->kind != eBinarySemaphore) &&
-        (semaphore->kind != eCountingSemaphore)) {
+        (semaphore->kind != eCountingSemaphore) &&
+        (semaphore->kind != eMutex)) {
         return pdFAIL;
     }
     prvAssertTimeoutIsValid(ticks_to_wait);
+    if (semaphore->kind == eMutex) {
+        current = prvCurrentTask();
+    }
     for (;;) {
         taskENTER_CRITICAL();
+        if (semaphore->kind == eMutex) {
+            configASSERT(((semaphore->count == 0U) &&
+                          (semaphore->owner != NULL)) ||
+                         ((semaphore->count == 1U) &&
+                          (semaphore->owner == NULL)));
+            if (semaphore->owner == current) {
+                taskEXIT_CRITICAL();
+                return pdFAIL;
+            }
+        }
         if (semaphore->count > 0U) {
+            if (semaphore->kind == eMutex) {
+                semaphore->owner = current;
+            }
             --semaphore->count;
             taskEXIT_CRITICAL();
             return pdPASS;
@@ -225,9 +305,17 @@ BaseType_t xSemaphoreTake(SemaphoreHandle_t semaphore_handle,
             taskEXIT_CRITICAL();
             return pdFAIL;
         }
-        current = prvCurrentTask();
+        if (current == NULL) {
+            current = prvCurrentTask();
+        }
+        owner = semaphore->owner;
         vTaskBlockCurrent(&semaphore->receive_waiters, semaphore,
-                          eTaskWaitSemaphoreTake, ticks_to_wait);
+                          (semaphore->kind == eMutex) ?
+                              eTaskWaitMutexTake : eTaskWaitSemaphoreTake,
+                          ticks_to_wait);
+        if ((semaphore->kind == eMutex) && (owner != NULL)) {
+            prvRecomputeInheritedPriority(owner);
+        }
         taskEXIT_CRITICAL();
         vPortYieldTask(current);
         if (current->wait_result == pdFALSE) {
@@ -242,14 +330,50 @@ BaseType_t xSemaphoreTake(SemaphoreHandle_t semaphore_handle,
 BaseType_t xSemaphoreGive(SemaphoreHandle_t semaphore_handle)
 {
     Queue_t *semaphore = semaphore_handle;
-    BaseType_t should_yield;
+    TCB_t *current = NULL;
+    TCB_t *waiter;
+    BaseType_t should_yield = pdFALSE;
 
     configASSERT(semaphore != NULL);
     if ((semaphore->kind != eBinarySemaphore) &&
-        (semaphore->kind != eCountingSemaphore)) {
+        (semaphore->kind != eCountingSemaphore) &&
+        (semaphore->kind != eMutex)) {
         return pdFAIL;
     }
+    if (semaphore->kind == eMutex) {
+        current = xTaskGetCurrentTaskHandle();
+        if ((current == NULL) || (current->state != eRunning)) {
+            return pdFAIL;
+        }
+    }
     taskENTER_CRITICAL();
+    if (semaphore->kind == eMutex) {
+        configASSERT(((semaphore->count == 0U) &&
+                      (semaphore->owner != NULL)) ||
+                     ((semaphore->count == 1U) &&
+                      (semaphore->owner == NULL)));
+        if (semaphore->owner != current) {
+            taskEXIT_CRITICAL();
+            return pdFAIL;
+        }
+        waiter = semaphore->receive_waiters.head;
+        semaphore->owner = NULL;
+        semaphore->count = 1U;
+        if (waiter != NULL) {
+            (void)xTaskUnblockOne(&semaphore->receive_waiters);
+        }
+        prvRecomputeInheritedPriority(current);
+#if configUSE_PREEMPTION
+        if ((waiter != NULL) && (waiter->priority > current->priority)) {
+            should_yield = pdTRUE;
+        }
+#endif
+        taskEXIT_CRITICAL();
+        if (should_yield == pdTRUE) {
+            vTaskYield();
+        }
+        return pdPASS;
+    }
     if (semaphore->count >= semaphore->max_count) {
         taskEXIT_CRITICAL();
         return pdFAIL;
