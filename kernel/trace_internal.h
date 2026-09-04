@@ -2,6 +2,7 @@
 #define MINI_TRACE_INTERNAL_H
 
 #include "trace.h"
+#include "portmacro.h"
 
 void vTraceRecordEvent(TraceEventType_t type,
                        TaskHandle_t task,

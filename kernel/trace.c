@@ -46,6 +46,11 @@ void vTraceRecordEvent(TraceEventType_t type,
                        UBaseType_t value)
 {
 #if configTRACE_ENABLED
+    if (xPortIsInsideISR() == pdTRUE) {
+        vTraceRecordEventFromISR(type, task, related_task, object, value,
+                                 xTaskGetTickCount());
+        return;
+    }
     taskENTER_CRITICAL();
     prvRecordEvent(type, task, related_task, object, value,
                    xTaskGetTickCount());

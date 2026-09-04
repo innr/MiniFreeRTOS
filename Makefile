@@ -55,6 +55,10 @@ $(BUILD_DIR)/test_p7_timers: $(KERNEL_SOURCES) tests/test_p7_timers.c | $(BUILD_
 $(BUILD_DIR)/test_p8_trace: $(KERNEL_SOURCES) tests/test_p8_trace.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(HEAP_DEFINE) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
 
+$(BUILD_DIR)/test_p9_port_frame: portable/cortex_m/port_frame.c \
+	tests/test_p9_port_frame.c | $(BUILD_DIR)
+	$(CC) -Iinclude -Iportable/cortex_m $(CFLAGS) $^ -o $@
+
 $(BUILD_DIR)/test_p6_heap_1: kernel/heap_1.c tests/test_p6_heap.c \
 	tests/test_heap_support.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -DconfigHEAP_SCHEME=1 \
@@ -103,7 +107,8 @@ test: $(BUILD_DIR)/test_p0 $(BUILD_DIR)/test_p1 $(BUILD_DIR)/test_p2 \
 	$(BUILD_DIR)/test_p5_mutex $(BUILD_DIR)/test_p7_timers \
 	$(BUILD_DIR)/test_p8_trace \
 	$(BUILD_DIR)/test_p6_heap_1 \
-	$(BUILD_DIR)/test_p6_heap_2 $(BUILD_DIR)/test_p6_heap_4 test_tools
+	$(BUILD_DIR)/test_p6_heap_2 $(BUILD_DIR)/test_p6_heap_4 \
+	$(BUILD_DIR)/test_p9_port_frame test_tools
 	./$(BUILD_DIR)/test_p0
 	./$(BUILD_DIR)/test_p1
 	./$(BUILD_DIR)/test_p2
@@ -114,6 +119,7 @@ test: $(BUILD_DIR)/test_p0 $(BUILD_DIR)/test_p1 $(BUILD_DIR)/test_p2 \
 	./$(BUILD_DIR)/test_p5_mutex
 	./$(BUILD_DIR)/test_p7_timers
 	./$(BUILD_DIR)/test_p8_trace
+	./$(BUILD_DIR)/test_p9_port_frame
 	./$(BUILD_DIR)/test_p6_heap_1
 	./$(BUILD_DIR)/test_p6_heap_2
 	./$(BUILD_DIR)/test_p6_heap_4

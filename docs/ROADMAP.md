@@ -11,5 +11,5 @@ implementation, tests, and lesson notes have been reviewed.
 - [x] P5: mutexes and priority inheritance
 - [x] P6: heap_1, heap_2, heap_4
 - [x] P7: software timer service task
-- [ ] P8: trace tools and full teaching labs
+- [x] P8: trace tools and full teaching labs
 - [ ] P9: Cortex-M port

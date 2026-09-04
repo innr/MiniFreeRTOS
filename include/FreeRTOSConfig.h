@@ -8,6 +8,18 @@
 #define configTICK_RATE_HZ       1000U
 #define configUSE_TIME_SLICING   1U
 
+#ifndef configCPU_CLOCK_HZ
+#define configCPU_CLOCK_HZ       25000000UL
+#endif
+
+#ifndef configSYSTICK_CLOCK_HZ
+#define configSYSTICK_CLOCK_HZ   configCPU_CLOCK_HZ
+#endif
+
+#ifndef configKERNEL_INTERRUPT_PRIORITY
+#define configKERNEL_INTERRUPT_PRIORITY 0xFFU
+#endif
+
 #ifndef configMAX_TIMER_NAME_LEN
 #define configMAX_TIMER_NAME_LEN 16U
 #endif
