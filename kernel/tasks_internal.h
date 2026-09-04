@@ -39,6 +39,7 @@ struct tskTaskControlBlock {
     eTaskState state;
     UBaseType_t creation_number;
     BaseType_t is_idle;
+    BaseType_t is_system;
     TCB_t *ready_previous;
     TCB_t *ready_next;
     BaseType_t in_ready_list;
@@ -55,6 +56,12 @@ struct tskTaskControlBlock {
     BaseType_t wait_has_timeout;
 };
 
+BaseType_t xTaskCreateSystem(TaskFunction_t task_code,
+                             const char *name,
+                             uint32_t stack_depth,
+                             void *parameters,
+                             UBaseType_t priority,
+                             TaskHandle_t *created_task);
 void vTaskRunEntry(TCB_t *task);
 void vTaskTickISR(void);
 void vTaskSetTickCountForTest(TickType_t tick);

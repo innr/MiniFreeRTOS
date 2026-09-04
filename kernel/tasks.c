@@ -4,7 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-static TCB_t *task_table[configMAX_TASKS + 1U];
+_Static_assert(configMAX_SYSTEM_TASKS >= 2U,
+               "configMAX_SYSTEM_TASKS must reserve idle and timer tasks");
+
+static TCB_t *task_table[configMAX_TASKS + configMAX_SYSTEM_TASKS];
 static ReadyList_t ready_lists[configMAX_PRIORITIES];
 static UBaseType_t task_count;
 static UBaseType_t application_task_count;
@@ -29,6 +32,14 @@ static void prvDelayListRemove(TCB_t *task);
 static void prvWakeExpiredTasks(void);
 static void prvEventListInsert(TaskEventList_t *list, TCB_t *task);
 static void prvEventListRemove(TCB_t *task);
+static BaseType_t prvCreateTask(TaskFunction_t task_code,
+                                const char *name,
+                                uint32_t stack_depth,
+                                void *parameters,
+                                UBaseType_t priority,
+                                BaseType_t is_system,
+                                BaseType_t is_idle,
+                                TaskHandle_t *created_task);
 
 static BaseType_t prvTickBefore(TickType_t lhs, TickType_t rhs)
 {
@@ -53,10 +64,38 @@ BaseType_t xTaskCreate(TaskFunction_t task_code,
                        UBaseType_t priority,
                        TaskHandle_t *created_task)
 {
+    return prvCreateTask(task_code, name, stack_depth, parameters, priority,
+                         pdFALSE, pdFALSE, created_task);
+}
+
+BaseType_t xTaskCreateSystem(TaskFunction_t task_code,
+                             const char *name,
+                             uint32_t stack_depth,
+                             void *parameters,
+                             UBaseType_t priority,
+                             TaskHandle_t *created_task)
+{
+    return prvCreateTask(task_code, name, stack_depth, parameters, priority,
+                         pdTRUE, pdFALSE, created_task);
+}
+
+static BaseType_t prvCreateTask(TaskFunction_t task_code,
+                                const char *name,
+                                uint32_t stack_depth,
+                                void *parameters,
+                                UBaseType_t priority,
+                                BaseType_t is_system,
+                                BaseType_t is_idle,
+                                TaskHandle_t *created_task)
+{
     if ((task_code == NULL) || (name == NULL) ||
         (stack_depth < configMINIMAL_STACK_SIZE) ||
         (priority >= configMAX_PRIORITIES) ||
-        (application_task_count >= configMAX_TASKS)) {
+        (task_count >= (configMAX_TASKS + configMAX_SYSTEM_TASKS)) ||
+        ((is_system == pdFALSE) &&
+         (application_task_count >= configMAX_TASKS)) ||
+        ((is_system == pdTRUE) &&
+         ((task_count - application_task_count) >= configMAX_SYSTEM_TASKS))) {
         return pdFAIL;
     }
 
@@ -79,10 +118,14 @@ BaseType_t xTaskCreate(TaskFunction_t task_code,
     task->inherited_priority = tskIDLE_PRIORITY;
     task->state = eReady;
     task->creation_number = application_task_count;
+    task->is_idle = is_idle;
+    task->is_system = is_system;
     (void)snprintf(task->name, sizeof(task->name), "%s", name);
     vPortInitialiseTask(task);
     task_table[task_count++] = task;
-    ++application_task_count;
+    if (is_system == pdFALSE) {
+        ++application_task_count;
+    }
     prvReadyListInsert(task);
 
     if (created_task != NULL) {
@@ -395,7 +438,8 @@ static TCB_t *prvSelectNextReadyTask(void)
 static BaseType_t prvAllApplicationTasksDeleted(void)
 {
     for (UBaseType_t index = 0U; index < task_count; ++index) {
-        if (task_table[index]->is_idle == pdFALSE &&
+        if ((task_table[index]->is_idle == pdFALSE) &&
+            (task_table[index]->is_system == pdFALSE) &&
             task_table[index]->state != eDeleted) {
             return pdFALSE;
         }
@@ -421,31 +465,17 @@ static void prvIdleTask(void *parameters)
 
 static BaseType_t prvCreateIdleTask(void)
 {
+    TaskHandle_t created_task = NULL;
+
     if (idle_task != NULL) {
         return pdPASS;
     }
-    TCB_t *task = pvPortMalloc(sizeof(*task));
-    if (task == NULL) {
+    if (prvCreateTask(prvIdleTask, "IDLE", configMINIMAL_STACK_SIZE, NULL,
+                      tskIDLE_PRIORITY, pdTRUE, pdTRUE,
+                      &created_task) != pdPASS) {
         return pdFAIL;
     }
-    (void)memset(task, 0, sizeof(*task));
-    task->stack = pvPortMalloc(configMINIMAL_STACK_SIZE);
-    if (task->stack == NULL) {
-        vPortFree(task);
-        return pdFAIL;
-    }
-    task->task_code = prvIdleTask;
-    task->stack_size = configMINIMAL_STACK_SIZE;
-    task->priority = tskIDLE_PRIORITY;
-    task->base_priority = tskIDLE_PRIORITY;
-    task->inherited_priority = tskIDLE_PRIORITY;
-    task->state = eReady;
-    task->is_idle = pdTRUE;
-    (void)snprintf(task->name, sizeof(task->name), "%s", "IDLE");
-    vPortInitialiseTask(task);
-    task_table[task_count++] = task;
-    prvReadyListInsert(task);
-    idle_task = task;
+    idle_task = created_task;
     return pdPASS;
 }
 

@@ -9,7 +9,8 @@ endif
 
 HEAP_SOURCE := kernel/heap_$(HEAP_SCHEME).c
 HEAP_DEFINE := -DconfigHEAP_SCHEME=$(HEAP_SCHEME)
-KERNEL_SOURCES := kernel/tasks.c kernel/queue.c $(HEAP_SOURCE) portable/posix/port.c
+KERNEL_SOURCES := kernel/tasks.c kernel/queue.c kernel/timers.c $(HEAP_SOURCE) \
+	portable/posix/port.c
 BUILD_DIR := build/heap_$(HEAP_SCHEME)
 NONPREEMPTIVE_FLAGS := -DconfigUSE_PREEMPTION=0
 PREEMPTIVE_FLAGS := -DconfigUSE_PREEMPTION=1
@@ -42,6 +43,9 @@ $(BUILD_DIR)/test_p4_semaphore: $(KERNEL_SOURCES) tests/test_p4_semaphore.c | $(
 	$(CC) $(CPPFLAGS) $(HEAP_DEFINE) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
 
 $(BUILD_DIR)/test_p5_mutex: $(KERNEL_SOURCES) tests/test_p5_mutex.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(HEAP_DEFINE) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
+
+$(BUILD_DIR)/test_p7_timers: $(KERNEL_SOURCES) tests/test_p7_timers.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(HEAP_DEFINE) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
 
 $(BUILD_DIR)/test_p6_heap_1: kernel/heap_1.c tests/test_p6_heap.c \
@@ -77,10 +81,14 @@ $(BUILD_DIR)/example_05: $(KERNEL_SOURCES) examples/05_mutex/main.c | $(BUILD_DI
 $(BUILD_DIR)/example_06: $(KERNEL_SOURCES) examples/06_heap/main.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(HEAP_DEFINE) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
 
+$(BUILD_DIR)/example_07: $(KERNEL_SOURCES) examples/07_timers/main.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(HEAP_DEFINE) $(CFLAGS) $(PREEMPTIVE_FLAGS) $^ -o $@
+
 test: $(BUILD_DIR)/test_p0 $(BUILD_DIR)/test_p1 $(BUILD_DIR)/test_p2 \
 	$(BUILD_DIR)/test_p3_delay $(BUILD_DIR)/test_p3_wrap \
 	$(BUILD_DIR)/test_p4_queue $(BUILD_DIR)/test_p4_semaphore \
-	$(BUILD_DIR)/test_p5_mutex $(BUILD_DIR)/test_p6_heap_1 \
+	$(BUILD_DIR)/test_p5_mutex $(BUILD_DIR)/test_p7_timers \
+	$(BUILD_DIR)/test_p6_heap_1 \
 	$(BUILD_DIR)/test_p6_heap_2 $(BUILD_DIR)/test_p6_heap_4
 	./$(BUILD_DIR)/test_p0
 	./$(BUILD_DIR)/test_p1
@@ -90,18 +98,21 @@ test: $(BUILD_DIR)/test_p0 $(BUILD_DIR)/test_p1 $(BUILD_DIR)/test_p2 \
 	./$(BUILD_DIR)/test_p4_queue
 	./$(BUILD_DIR)/test_p4_semaphore
 	./$(BUILD_DIR)/test_p5_mutex
+	./$(BUILD_DIR)/test_p7_timers
 	./$(BUILD_DIR)/test_p6_heap_1
 	./$(BUILD_DIR)/test_p6_heap_2
 	./$(BUILD_DIR)/test_p6_heap_4
 
 example: $(BUILD_DIR)/example_01 $(BUILD_DIR)/example_02 $(BUILD_DIR)/example_03 \
-	$(BUILD_DIR)/example_04 $(BUILD_DIR)/example_05 $(BUILD_DIR)/example_06
+	$(BUILD_DIR)/example_04 $(BUILD_DIR)/example_05 $(BUILD_DIR)/example_06 \
+	$(BUILD_DIR)/example_07
 	./$(BUILD_DIR)/example_01
 	./$(BUILD_DIR)/example_02
 	./$(BUILD_DIR)/example_03
 	./$(BUILD_DIR)/example_04
 	./$(BUILD_DIR)/example_05
 	./$(BUILD_DIR)/example_06
+	./$(BUILD_DIR)/example_07
 
 clean:
 	rm -rf build
