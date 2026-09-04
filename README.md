@@ -4,7 +4,7 @@ MiniFreeRTOS is a from-scratch, FreeRTOS-like teaching kernel written in C. The
 first port runs on a POSIX PC, letting you learn and debug kernel concepts before
 moving to Cortex-M exception-based context switching.
 
-## Current milestone: P7
+## Current milestone: P8
 
 Implemented:
 
@@ -33,6 +33,8 @@ Implemented:
 - aligned `pvPortMalloc()`/`vPortFree()` with free-byte statistics
 - software timer service task with one-shot and auto-reload timers
 - asynchronous timer start, stop, reset, and period-change commands
+- allocation-free static trace ring with task, IPC, mutex, and timer events
+- CSV trace lesson and standard-library host report
 
 Not implemented yet: interrupt-safe APIs or a hardware port.
 
@@ -74,9 +76,15 @@ heap statistics are visible. Select another allocator with
 `make example` runs `examples/07_timers`, where a timer service task invokes an
 auto-reload callback and the callback stops itself after three firings.
 
+`make trace > /tmp/minifreertos-trace.csv` runs `examples/08_trace` and writes
+a chronological CSV event stream. Summarize it with
+`python3 tools/trace_report.py /tmp/minifreertos-trace.csv`. Use
+`make TRACE_TICKS=1 trace` when a lesson needs one event per tick.
+
 Start with `docs/DESIGN.md`, `docs/P1_DESIGN.md`, `docs/P2_DESIGN.md`,
 `docs/P3_DESIGN.md`, `docs/P4_DESIGN.md`, `docs/P5_DESIGN.md`, and
-`docs/P6_DESIGN.md`, and `docs/P7_DESIGN.md`, then read
+`docs/P6_DESIGN.md`, `docs/P7_DESIGN.md`, and `docs/P8_DESIGN.md`, then read
+`docs/P8_TRACE_LAB.md` and `docs/LABS.md` before reading
 `kernel/tasks.c` beside
 `portable/posix/port.c`. The boundary between those two files is the most
 important lesson in P0: the kernel decides *which* task runs, while the port
