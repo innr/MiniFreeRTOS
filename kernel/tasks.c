@@ -1,5 +1,6 @@
 #include "tasks_internal.h"
 #include "portable.h"
+#include "trace_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -148,6 +149,7 @@ static void prvReadyListInsert(TCB_t *task)
     list->tail = task;
     ++list->length;
     task->in_ready_list = pdTRUE;
+    TRACE_RECORD(eTraceTaskReady, task, NULL, NULL, task->priority);
 }
 
 static void prvReadyListRemove(TCB_t *task)
@@ -355,6 +357,8 @@ void vTaskBlockCurrent(TaskEventList_t *list,
     task->wake_tick = tick_count + ticks_to_wait;
     prvEventListInsert(list, task);
     prvDelayListInsert(task);
+    TRACE_RECORD(eTraceTaskBlocked, task, NULL, wait_object,
+                 (UBaseType_t)wait_reason);
 }
 
 BaseType_t xTaskUnblockOne(TaskEventList_t *list)
@@ -374,6 +378,8 @@ BaseType_t xTaskUnblockOne(TaskEventList_t *list)
     task->wait_result = pdTRUE;
     task->state = eReady;
     prvReadyListInsert(task);
+    TRACE_RECORD(eTraceTaskWake, task, NULL, task->wait_object,
+                 (UBaseType_t)task->wait_reason);
 #if configUSE_PREEMPTION
     if ((current_task != NULL) && (current_task->state == eRunning) &&
         (task->priority > current_task->priority)) {
@@ -419,6 +425,8 @@ static void prvWakeExpiredTasks(void)
         task->wait_result = pdFALSE;
         task->state = eReady;
         prvReadyListInsert(task);
+        TRACE_RECORD(eTraceTaskWake, task, NULL, task->wait_object,
+                     (UBaseType_t)task->wait_reason);
     }
 }
 
@@ -481,6 +489,8 @@ static BaseType_t prvCreateIdleTask(void)
 
 void vTaskStartScheduler(void)
 {
+    TCB_t *previous_task = NULL;
+
     if ((scheduler_running == pdTRUE) || (prvCreateIdleTask() != pdPASS)) {
         return;
     }
@@ -496,6 +506,9 @@ void vTaskStartScheduler(void)
         }
         current_task = next;
         current_task->state = eRunning;
+        TRACE_RECORD(eTraceTaskSwitch, current_task, previous_task, NULL,
+                     current_task->priority);
+        previous_task = current_task;
         task_context_active = pdTRUE;
         vPortRunTask(current_task);
         task_context_active = pdFALSE;
@@ -547,6 +560,8 @@ void vTaskDelay(TickType_t ticks_to_delay)
     task->wait_has_timeout = pdFALSE;
     task->state = eBlocked;
     prvDelayListInsert(task);
+    TRACE_RECORD(eTraceTaskBlocked, task, NULL, NULL,
+                 (UBaseType_t)eTaskWaitNone);
     taskEXIT_CRITICAL();
     vPortYieldTask(task);
     vTaskClearWaitState(task);
@@ -588,6 +603,8 @@ BaseType_t xTaskAbortDelay(TaskHandle_t task)
     task->wait_result = pdFALSE;
     task->state = eReady;
     prvReadyListInsert(task);
+    TRACE_RECORD(eTraceTaskWake, task, NULL, task->wait_object,
+                 (UBaseType_t)task->wait_reason);
 #if configUSE_PREEMPTION
     if ((scheduler_running == pdTRUE) && (current_task != NULL) &&
         (current_task->state == eRunning) &&
@@ -609,6 +626,7 @@ void vTaskRunEntry(TCB_t *task)
     task->task_code(task->parameters);
     configASSERT(xTaskOwnsMutex(task) == pdFALSE);
     task->state = eDeleted;
+    TRACE_RECORD(eTraceTaskDeleted, task, NULL, NULL, 0U);
     vPortYieldTask(task);
     configASSERT(pdFALSE);
 }
@@ -648,6 +666,9 @@ void vTaskSetTickCountForTest(TickType_t tick)
 void vTaskTickISR(void)
 {
     ++tick_count;
+#if configTRACE_INCLUDE_TICKS
+    TRACE_RECORD_TICK(tick_count, current_task);
+#endif
     prvWakeExpiredTasks();
     if (scheduler_running != pdTRUE ||
         task_context_active != pdTRUE ||
