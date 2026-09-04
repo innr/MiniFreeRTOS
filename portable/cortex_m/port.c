@@ -142,6 +142,8 @@ void vPortStartScheduler(void)
     prvConfigureExceptionPriorities();
     vTaskSwitchContext();
     configASSERT(pxTaskGetCurrent() != NULL);
+    /* The first SVC return is the transition into a real task context. */
+    vTaskSetContextActive(pdTRUE);
     __asm volatile("svc 0" ::: "memory");
     prvWaitForever();
 }

@@ -10,6 +10,8 @@ typedef struct HeapBlock {
     size_t size;
     struct HeapBlock *next;
     uint32_t magic;
+    /* Keep the header size aligned when size_t/pointers are 32-bit. */
+    size_t alignment_padding;
 } HeapBlock_t;
 
 enum {

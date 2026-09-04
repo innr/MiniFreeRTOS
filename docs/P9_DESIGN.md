@@ -65,12 +65,13 @@ the ARM image and QEMU acceptance suite require those tools to be installed in
 the build environment. P9 must not silently fall back to a host executable and
 call that a Cortex-M result.
 
-The existing kernel still includes a few hosted-C conveniences (`stdio.h`,
-formatted diagnostics, and `abort`) in code paths used by the PC lesson. The
-Cortex-M build must either provide explicit freestanding shims or exclude
-host-only diagnostics at compile time. It must never use a C library allocator:
-the existing `heap_1`, `heap_2`, and `heap_4` implementations remain the sole
-task/IPC allocation choices.
+The PC lesson keeps a few hosted-C conveniences (`stdio.h`, formatted
+diagnostics, and `abort`) in the POSIX port. The Cortex-M build moves diagnostics
+to board/port hooks and supplies explicit freestanding memory shims. It must
+never use a C library allocator: the existing `heap_1`, `heap_2`, and `heap_4`
+implementations remain the sole task/IPC allocation choices. Their variable-size
+headers include alignment padding so the existing 8-byte payload contract also
+compiles on a 32-bit Cortex-M ABI.
 
 ## 4. Architecture and port boundary
 

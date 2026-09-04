@@ -109,6 +109,7 @@ typedef struct HeapBlock {
     size_t size;              /* header plus payload, aligned */
     struct HeapBlock *next;   /* meaningful while the block is free */
     uint32_t magic;           /* allocated/free validation marker */
+    size_t alignment_padding; /* keeps the header aligned on 32-bit ports */
 } HeapBlock_t;
 ```
 
@@ -116,6 +117,11 @@ typedef struct HeapBlock {
 header and at least one aligned payload unit. Allocated blocks have
 `next == NULL`; free blocks are linked in address order. The free list itself
 is stored inside free blocks, so no host allocation is needed.
+
+The padding field is not part of the allocator state; it makes the header size
+an alignment multiple when `size_t` and pointers are 32-bit (for example, the
+Cortex-M3 build uses 8-byte payload alignment). This keeps the payload aligned
+without weakening the compile-time layout check.
 
 `heap_2` removes a fitting free block and optionally splits it. On free it
 inserts the block back in address order without merging neighboring blocks.
