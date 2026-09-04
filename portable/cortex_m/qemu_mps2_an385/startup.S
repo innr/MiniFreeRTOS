@@ -63,7 +63,8 @@ Reset_Handler:
 6:
     bl      vBoardEarlyInit
     bl      main
-    b       Default_Handler
+    ldr     r0, =Default_Handler
+    bx      r0
 .size Reset_Handler, .-Reset_Handler
 
 .section .text.Default_Handler, "ax", %progbits

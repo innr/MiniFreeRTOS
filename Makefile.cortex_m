@@ -38,7 +38,7 @@ PORT_SOURCES := portable/cortex_m/port.c portable/cortex_m/port_frame.c \
 APPLICATION_SOURCES := examples/09_cortex_m/main.c
 SOURCES := $(KERNEL_SOURCES) $(PORT_SOURCES) $(APPLICATION_SOURCES)
 
-.PHONY: all check-tools check-sources size inspect qemu clean
+.PHONY: all check-tools check-qemu check-sources size inspect qemu clean
 
 all: check-tools check-sources $(ELF) $(BIN)
 
@@ -49,6 +49,13 @@ check-tools:
 	done; \
 	if [ "$$missing" -ne 0 ]; then \
 		echo "Install an arm-none-eabi toolchain and retry make -f Makefile.cortex_m"; \
+		exit 2; \
+	fi
+
+check-qemu:
+	@if ! command -v "$(QEMU)" >/dev/null 2>&1; then \
+		echo "missing QEMU emulator: $(QEMU)"; \
+		echo "Install qemu-system-arm and retry make -f Makefile.cortex_m qemu"; \
 		exit 2; \
 	fi
 
@@ -74,7 +81,7 @@ size: check-tools $(ELF)
 inspect: check-tools check-sources $(ELF)
 	$(OBJDUMP) -h -t $(ELF)
 
-qemu: check-tools check-sources $(ELF)
+qemu: check-tools check-qemu check-sources $(ELF)
 	$(QEMU) -M mps2-an385 -cpu cortex-m3 -kernel $(ELF) \
 		-nographic -semihosting-config enable=on,target=native
 
