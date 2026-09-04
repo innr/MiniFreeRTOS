@@ -27,6 +27,10 @@ void vTaskStartScheduler(void);
 void vTaskEndScheduler(void);
 void vTaskYield(void);
 #define taskYIELD() vTaskYield()
+void vTaskDelay(TickType_t ticks_to_delay);
+void vTaskDelayUntil(TickType_t *previous_wake_time,
+                     TickType_t time_increment);
+BaseType_t xTaskAbortDelay(TaskHandle_t task);
 
 TaskHandle_t xTaskGetCurrentTaskHandle(void);
 const char *pcTaskGetName(TaskHandle_t task);

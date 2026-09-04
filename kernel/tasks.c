@@ -13,8 +13,29 @@ static BaseType_t scheduler_running;
 static BaseType_t task_context_active;
 static volatile TickType_t tick_count;
 
+typedef struct {
+    TCB_t *head;
+    TCB_t *tail;
+    UBaseType_t length;
+} DelayList_t;
+
+static DelayList_t delayed_list;
+
 static void prvReadyListInsert(TCB_t *task);
 static void prvReadyListRemove(TCB_t *task);
+static void prvDelayListInsert(TCB_t *task);
+static void prvDelayListRemove(TCB_t *task);
+static void prvWakeExpiredTasks(void);
+
+static BaseType_t prvTickBefore(TickType_t lhs, TickType_t rhs)
+{
+    return ((int32_t)(lhs - rhs) < 0) ? pdTRUE : pdFALSE;
+}
+
+static BaseType_t prvTickReached(TickType_t now, TickType_t deadline)
+{
+    return ((int32_t)(now - deadline) >= 0) ? pdTRUE : pdFALSE;
+}
 
 void vAssertCalled(const char *file, int line)
 {
@@ -101,6 +122,73 @@ static void prvReadyListRemove(TCB_t *task)
     --list->length;
 }
 
+static void prvDelayListInsert(TCB_t *task)
+{
+    TCB_t *cursor;
+
+    configASSERT(task->in_delay_list == pdFALSE);
+    cursor = delayed_list.head;
+    while ((cursor != NULL) &&
+           (prvTickBefore(task->wake_tick, cursor->wake_tick) == pdFALSE)) {
+        cursor = cursor->delay_next;
+    }
+
+    if (cursor == NULL) {
+        task->delay_previous = delayed_list.tail;
+        task->delay_next = NULL;
+        if (delayed_list.tail != NULL) {
+            delayed_list.tail->delay_next = task;
+        } else {
+            delayed_list.head = task;
+        }
+        delayed_list.tail = task;
+    } else {
+        task->delay_previous = cursor->delay_previous;
+        task->delay_next = cursor;
+        if (cursor->delay_previous != NULL) {
+            cursor->delay_previous->delay_next = task;
+        } else {
+            delayed_list.head = task;
+        }
+        cursor->delay_previous = task;
+    }
+    ++delayed_list.length;
+    task->in_delay_list = pdTRUE;
+}
+
+static void prvDelayListRemove(TCB_t *task)
+{
+    configASSERT(task->in_delay_list == pdTRUE);
+    if (task->delay_previous != NULL) {
+        task->delay_previous->delay_next = task->delay_next;
+    } else {
+        delayed_list.head = task->delay_next;
+    }
+    if (task->delay_next != NULL) {
+        task->delay_next->delay_previous = task->delay_previous;
+    } else {
+        delayed_list.tail = task->delay_previous;
+    }
+    task->delay_previous = NULL;
+    task->delay_next = NULL;
+    task->in_delay_list = pdFALSE;
+    configASSERT(delayed_list.length > 0U);
+    --delayed_list.length;
+}
+
+static void prvWakeExpiredTasks(void)
+{
+    while ((delayed_list.head != NULL) &&
+           (prvTickReached(tick_count, delayed_list.head->wake_tick) == pdTRUE)) {
+        TCB_t *task = delayed_list.head;
+        configASSERT(task->state == eBlocked);
+        prvDelayListRemove(task);
+        task->wake_tick = 0U;
+        task->state = eReady;
+        prvReadyListInsert(task);
+    }
+}
+
 static TCB_t *prvSelectNextReadyTask(void)
 {
     for (int priority = (int)configMAX_PRIORITIES - 1; priority >= 0; --priority) {
@@ -133,7 +221,11 @@ static void prvIdleTask(void *parameters)
             vTaskEndScheduler();
             return;
         }
+#if configUSE_PREEMPTION
+        vPortWaitForTick();
+#else
         taskYIELD();
+#endif
     }
 }
 
@@ -211,6 +303,74 @@ void vTaskYield(void)
     vPortYieldTask(current_task);
 }
 
+void vTaskDelay(TickType_t ticks_to_delay)
+{
+    TCB_t *task;
+
+    configASSERT(scheduler_running == pdTRUE);
+    configASSERT(current_task != NULL);
+    if (ticks_to_delay == 0U) {
+        vTaskYield();
+        return;
+    }
+    configASSERT(ticks_to_delay < (TickType_t)INT32_MAX);
+
+    task = current_task;
+    taskENTER_CRITICAL();
+    task->wake_tick = tick_count + ticks_to_delay;
+    task->state = eBlocked;
+    prvDelayListInsert(task);
+    taskEXIT_CRITICAL();
+    vPortYieldTask(task);
+}
+
+void vTaskDelayUntil(TickType_t *previous_wake_time,
+                     TickType_t time_increment)
+{
+    TickType_t next_wake_time;
+
+    configASSERT(previous_wake_time != NULL);
+    configASSERT(time_increment < (TickType_t)INT32_MAX);
+    next_wake_time = *previous_wake_time + time_increment;
+    *previous_wake_time = next_wake_time;
+    if (prvTickBefore(tick_count, next_wake_time) == pdTRUE) {
+        vTaskDelay(next_wake_time - tick_count);
+    } else {
+        vTaskYield();
+    }
+}
+
+BaseType_t xTaskAbortDelay(TaskHandle_t task)
+{
+    BaseType_t should_yield = pdFALSE;
+
+    if (task == NULL) {
+        return pdFAIL;
+    }
+    taskENTER_CRITICAL();
+    if ((task->state != eBlocked) || (task->in_delay_list == pdFALSE)) {
+        taskEXIT_CRITICAL();
+        return pdFAIL;
+    }
+    prvDelayListRemove(task);
+    task->wake_tick = 0U;
+    task->state = eReady;
+    prvReadyListInsert(task);
+#if configUSE_PREEMPTION
+    if ((scheduler_running == pdTRUE) && (current_task != NULL) &&
+        (current_task->state == eRunning) &&
+        (task->priority > current_task->priority)) {
+        should_yield = pdTRUE;
+    }
+#endif
+    taskEXIT_CRITICAL();
+
+    if (should_yield == pdTRUE) {
+        vTaskYield();
+    }
+    return pdPASS;
+}
+
 void vTaskRunEntry(TCB_t *task)
 {
     configASSERT(task == current_task);
@@ -246,9 +406,16 @@ TickType_t xTaskGetTickCount(void)
     return tick_count;
 }
 
+void vTaskSetTickCountForTest(TickType_t tick)
+{
+    configASSERT(scheduler_running == pdFALSE);
+    tick_count = tick;
+}
+
 void vTaskTickISR(void)
 {
     ++tick_count;
+    prvWakeExpiredTasks();
     if (scheduler_running != pdTRUE ||
         task_context_active != pdTRUE ||
         current_task == NULL) {

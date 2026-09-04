@@ -26,9 +26,14 @@ struct tskTaskControlBlock {
     TCB_t *ready_previous;
     TCB_t *ready_next;
     BaseType_t in_ready_list;
+    TickType_t wake_tick;
+    TCB_t *delay_previous;
+    TCB_t *delay_next;
+    BaseType_t in_delay_list;
 };
 
 void vTaskRunEntry(TCB_t *task);
 void vTaskTickISR(void);
+void vTaskSetTickCountForTest(TickType_t tick);
 
 #endif
